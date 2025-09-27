@@ -36,8 +36,13 @@ class Config:
     
     # Contracts
     AVANTIS_TRADING_CONTRACT = os.getenv('AVANTIS_TRADING_CONTRACT')
-    AVANTIS_VAULT_CONTRACT = os.getenv('AVANTIS_VAULT_CONTRACT')
+    AVANTIS_VAULT_CONTRACT = os.getenv('AVANTIS_VAULT_CONTRACT')  # Resolved at runtime
     USDC_CONTRACT = os.getenv('USDC_CONTRACT', '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913')
+    
+    @property
+    def vault_contract(self) -> str:
+        """Get vault contract address, resolved at runtime"""
+        return os.getenv('AVANTIS_VAULT_CONTRACT', '')
     
     # Trading Configuration
     MAX_LEVERAGE = int(os.getenv('MAX_LEVERAGE', 500))
@@ -91,7 +96,6 @@ class Config:
             'REDIS_URL', 
             'BASE_RPC_URL',
             'AVANTIS_TRADING_CONTRACT',
-            'AVANTIS_VAULT_CONTRACT',
             'ENCRYPTION_KEY'
         ]
         

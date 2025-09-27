@@ -18,9 +18,12 @@ from src.bot.handlers import (
 from src.bot.handlers.copy_trading_commands import (
     copy_trading_handlers, alfa_refresh_callback, copy_status_callback
 )
+from src.bot.handlers.alfa_handlers import alfa_handlers
+from src.bot.handlers.admin_commands import admin_handlers
 from src.bot.keyboards.trading_keyboards import get_quick_trade_keyboard
 from src.services.analytics.position_tracker import PositionTracker
 from src.services.indexers.avantis_indexer import AvantisIndexer
+from src.services.contracts.avantis_registry import initialize_registry, resolve_avantis_vault
 
 # Configure logging
 logging.basicConfig(
@@ -50,6 +53,14 @@ def create_application() -> Application:
     
     # Add copy trading command handlers
     for handler in copy_trading_handlers:
+        app.add_handler(handler)
+    
+    # Add alfa command handlers
+    for handler in alfa_handlers:
+        app.add_handler(handler)
+    
+    # Add admin command handlers
+    for handler in admin_handlers:
         app.add_handler(handler)
     
     # Add conversation handler for trading
@@ -235,6 +246,36 @@ async def handle_analytics(update, context, callback_data: str):
 async def start_background_services():
     """Start background services like position tracker and indexer"""
     try:
+        # Initialize contract registry and resolve vault address
+        if (hasattr(config, 'AVANTIS_TRADING_CONTRACT') and 
+            config.AVANTIS_TRADING_CONTRACT and 
+            hasattr(config, 'BASE_RPC_URL') and 
+            config.BASE_RPC_URL):
+            
+            from web3 import Web3
+            
+            # Initialize Web3 connection
+            w3 = Web3(Web3.HTTPProvider(config.BASE_RPC_URL))
+            if not w3.is_connected():
+                logger.error("❌ Failed to connect to Base RPC")
+                return
+            
+            # Initialize contract registry
+            registry = initialize_registry(w3, config.AVANTIS_TRADING_CONTRACT)
+            
+            # Resolve vault address
+            try:
+                vault_address = await resolve_avantis_vault()
+                if vault_address:
+                    os.environ["AVANTIS_VAULT_CONTRACT"] = vault_address
+                    logger.info(f"✅ Resolved Avantis Vault: {vault_address}")
+                else:
+                    logger.warning("⚠️ Could not resolve vault address from Trading Proxy")
+                    logger.info("Bot will continue without vault contract (trading features will work)")
+            except Exception as e:
+                logger.warning(f"⚠️ Error resolving vault address: {e}")
+                logger.info("Bot will continue without vault contract (trading features will work)")
+        
         # Initialize position tracker if database URL is available
         if hasattr(config, 'DATABASE_URL') and config.DATABASE_URL:
             engine = create_engine(config.DATABASE_URL, pool_pre_ping=True)
@@ -246,7 +287,7 @@ async def start_background_services():
             
             # Start position tracker as background task
             asyncio.create_task(tracker.start())
-            logger.info("Position tracker started")
+            logger.info("✅ Position tracker started")
         
         # Initialize Avantis indexer if contracts are configured
         if (hasattr(config, 'AVANTIS_TRADING_CONTRACT') and 
@@ -254,14 +295,38 @@ async def start_background_services():
             hasattr(config, 'BASE_RPC_URL') and 
             config.BASE_RPC_URL):
             
-            indexer = AvantisIndexer()
+            from sqlalchemy.orm import sessionmaker
             
-            # Start indexer tailing as background task
-            asyncio.create_task(indexer.tail_follow())
-            logger.info("Avantis indexer started")
+            # Set up database session factory for indexer
+            engine = create_engine(config.DATABASE_URL, pool_pre_ping=True)
+            Session = sessionmaker(bind=engine, autoflush=False, autocommit=False)
+            
+            indexer = AvantisIndexer()
+            indexer.set_db_session_factory(Session)
+            
+            # Get latest block and do initial backfill
+            w3 = indexer.w3_http
+            latest = w3.eth.block_number
+            backfill_range = int(os.getenv("INDEXER_BACKFILL_RANGE", "50000"))
+            backfill_from = max(0, latest - backfill_range)
+            
+            logger.info(f"🔄 Starting indexer backfill from block {backfill_from} to {latest}")
+            
+            # Do initial backfill, then start tailing
+            asyncio.create_task(run_indexer_with_backfill(indexer, backfill_from, latest))
+            logger.info("✅ Avantis indexer started with backfill")
             
     except Exception as e:
-        logger.error(f"Error starting background services: {e}")
+        logger.error(f"❌ Error starting background services: {e}")
+
+async def run_indexer_with_backfill(indexer, from_block, to_block):
+    """Run indexer with backfill then tail follow"""
+    try:
+        await indexer.backfill(from_block, to_block)
+        logger.info("✅ Backfill completed, starting tail following...")
+        await indexer.tail_follow(start_block=to_block)
+    except Exception as e:
+        logger.error(f"❌ Indexer error: {e}")
 
 def main():
     """Start the bot"""
