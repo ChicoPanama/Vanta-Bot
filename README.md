@@ -41,6 +41,40 @@ python main.py
 ENVIRONMENT=production python main.py
 ```
 
+## 📱 **Bot Commands**
+
+### **Getting Started**
+- `/start` - Welcome message and first-run tour
+- `/help` - Quick command reference and usage guide
+- `/markets` - Browse available trading pairs with user preferences
+
+### **Trading**
+- `/positions` - View and manage your open positions
+- `/analyze` - Educational risk analysis (Phase 5)
+- `/calc` - Position size calculator and helper
+
+### **User Settings**
+- `/prefs` - Configure default slippage, leverage chips, collateral chips, and favorites
+- `/mode` - Set UI preference (DRY/LIVE) - *server controls actual execution mode*
+- `/linkwallet` - Link EVM address for read-only analytics (optional)
+
+### **Copy-Trading**
+- `/alfa top50` - View top traders with Follow buttons for easy copy-trading setup
+- `/follow <trader_id>` - Follow a trader and configure copy settings
+- `/following` - Manage your followed traders and their copy settings
+- `/unfollow <trader_id>` - Stop following a trader
+
+### **Admin Commands**
+- `/autocopy_off_all` - Emergency disable auto-copy for all users
+- `/autocopy_on_user <id>` - Enable auto-copy for specific user
+- `/autocopy_off_user <id>` - Disable auto-copy for specific user
+
+### **System & Admin**
+- `/health` - System health and uptime status
+- `/diag` - Diagnostic information and circuit status
+
+> **Note**: All user preferences are optional and stored locally. The `/mode` command sets your UI preference only - actual execution mode is controlled by server configuration for safety.
+
 ## ✨ **Key Features**
 
 ### 🎯 **Core Trading**
@@ -50,10 +84,16 @@ ENVIRONMENT=production python main.py
 - **Real-time Execution**: Instant trade execution on Avantis Protocol
 
 ### 🤖 **AI-Powered Copy Trading**
-- **Smart Leader Detection**: AI analyzes trader performance
-- **Risk Management**: Automatic position sizing and risk controls
-- **Performance Analytics**: Real-time P&L tracking and reporting
-- **Dry Run Mode**: Test strategies without real money
+- **Smart Leader Detection**: AI analyzes trader performance with `/alfa top50`
+- **One-Tap Follow**: Follow top traders directly from leaderboard
+- **Per-Trader Settings**: Configure auto-copy, sizing modes, risk caps, and notifications
+- **Risk Management**: Automatic position sizing, leverage caps, and loss protection
+- **Trade Alerts**: Get notified when followed traders open/close positions
+- **Daily Digests**: Summary of followed traders' performance and activity
+- **Graceful Fallback**: Works with notifications even if auto-copy executor is not available
+- **Production Hardening**: Rate limiting, Redis deduplication, structured logging, admin controls
+- **Feature Flags**: Canary rollout with user allowlists and server mode guards
+- **Synthetic Monitoring**: Daily health checks to verify pipeline integrity
 
 ### 🏗️ **Enterprise Architecture**
 - **Clean Architecture**: Modular, scalable design
@@ -265,6 +305,55 @@ pytest tests/test_analytics.py
 pytest --cov=src tests/
 ```
 
+## 🧪 **Testing & Monitoring**
+
+### **Unit Tests**
+```bash
+# Run all tests
+make test
+
+# Run copy-trading tests
+pytest tests/test_copy_store.py
+pytest tests/test_copy_service.py
+pytest tests/test_alerts.py
+
+# Run with coverage
+pytest --cov=src tests/
+```
+
+### **SDK Validation**
+```bash
+# Check Avantis SDK setup and connectivity
+python scripts/check_avantis_sdk.py
+
+# Expected output: ✅ All SDK checks passed (with proper API keys)
+```
+
+### **Synthetic Signal Monitoring**
+```bash
+# Run synthetic health check (sends test signal to ops chat)
+python scripts/synthetic_signal_cron.py
+
+# Expected output: ✅ Synthetic signal check passed
+```
+
+### **Production Validation**
+```bash
+# Run comprehensive validation
+python scripts/validate_phase8.py
+
+# Run final mile tests
+python scripts/test_final_mile.py
+```
+
+### **Feature Flags**
+```bash
+# Environment variables for controlled rollout
+export COPY_AUTOCOPY_DEFAULT=off          # Default auto-copy setting
+export AUTOCOPY_ALLOWLIST=12345678,98765432  # Allowed user IDs
+export REDIS_URL=redis://localhost:6379   # Optional Redis for deduplication
+```
+
 ## 🔒 **Security**
 
 ### **Production Safety Features**
@@ -313,6 +402,20 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 - **Issues**: Report bugs via GitHub Issues
 - **Discussions**: Join community discussions
 - **Security**: Report security issues privately
+
+## 🔄 **Recent Updates**
+
+### **SDK Integration Fixes (Latest)**
+- ✅ **Fixed Avantis SDK Import Issues**: Resolved `avantis_trader_sdk` and `dotenv` import errors in `check_avantis_sdk.py`
+- ✅ **Updated Dependencies**: Installed all required packages in virtual environment
+- ✅ **API Compatibility**: Fixed TradeInput constructor and TraderClient method calls for SDK v0.8.4
+- ✅ **Production Ready**: Script now runs successfully with proper error handling
+
+### **Production Features**
+- ✅ **Copy Trading System**: AI-powered leader detection and automated trade copying
+- ✅ **Risk Management**: 500x leverage safety validation and position limits
+- ✅ **Monitoring**: Health checks, metrics, and synthetic signal validation
+- ✅ **Security**: Rate limiting, encrypted storage, and admin controls
 
 ## 🙏 **Acknowledgments**
 

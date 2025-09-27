@@ -62,7 +62,83 @@ class BotApplication:
     
     def _register_handlers(self):
         """Register all command and callback handlers"""
-        # Register command handlers
+        # Register Phase 2 handlers first (higher priority)
+        try:
+            from src.bot.handlers.start_handlers import register as register_start_handlers
+            from src.bot.handlers.markets_handlers import register as register_markets_handlers
+            
+            register_start_handlers(self.app)
+            register_markets_handlers(self.app)
+            logger.info("Phase 2 handlers registered successfully")
+        except Exception as e:
+            logger.warning(f"Failed to register Phase 2 handlers: {e}")
+        
+        # Register Phase 3 handlers (quote & allowance)
+        try:
+            from src.bot.handlers.quote_handlers import register as register_quote_handlers
+            
+            register_quote_handlers(self.app)
+            logger.info("Phase 3 handlers registered successfully")
+        except Exception as e:
+            logger.warning(f"Failed to register Phase 3 handlers: {e}")
+        
+        # Register Phase 4 handlers (positions & exec)
+        try:
+            from src.bot.handlers.positions_handlers import register as register_positions_handlers
+            
+            register_positions_handlers(self.app)
+            logger.info("Phase 4 handlers registered successfully")
+        except Exception as e:
+            logger.warning(f"Failed to register Phase 4 handlers: {e}")
+        
+        # Register Phase 5 handlers (risk education)
+        try:
+            from src.bot.handlers.risk_handlers import register as register_risk_handlers
+            
+            register_risk_handlers(self.app)
+            logger.info("Phase 5 handlers registered successfully")
+        except Exception as e:
+            logger.warning(f"Failed to register Phase 5 handlers: {e}")
+        
+        # Register Phase 6 handlers (admin & health)
+        try:
+            from src.bot.handlers.admin_handlers import register as register_admin_handlers
+            
+            register_admin_handlers(self.app)
+            logger.info("Phase 6 handlers registered successfully")
+        except Exception as e:
+            logger.warning(f"Failed to register Phase 6 handlers: {e}")
+        
+        # Register Phase 7 handlers (onboarding & user settings)
+        try:
+            from src.bot.handlers.onboarding_handlers import register as register_onboarding_handlers
+            from src.bot.handlers.prefs_handlers import register as register_prefs_handlers
+            from src.bot.handlers.wallet_handlers import register as register_wallet_handlers
+            from src.bot.handlers.mode_handlers import register as register_mode_handlers
+            
+            register_onboarding_handlers(self.app)
+            register_prefs_handlers(self.app)
+            register_wallet_handlers(self.app)
+            register_mode_handlers(self.app)
+            logger.info("Phase 7 handlers registered successfully")
+        except Exception as e:
+            logger.warning(f"Failed to register Phase 7 handlers: {e}")
+        
+        # Register Phase 8 handlers (copy-trading UX)
+        try:
+            from src.bot.handlers.copy_handlers import register as register_copy_handlers
+            from src.bot.handlers.alfa_handlers import alfa_handlers
+            from src.services.copytrading.copy_service import init as copy_init
+            
+            register_copy_handlers(self.app)
+            for handler in alfa_handlers:
+                self.app.add_handler(handler)
+            copy_init()  # Initialize copy-trading database
+            logger.info("Phase 8 handlers registered successfully")
+        except Exception as e:
+            logger.warning(f"Failed to register Phase 8 handlers: {e}")
+        
+        # Register existing command handlers
         command_handlers = self.handler_registry.get_command_handlers()
         for command, handler in command_handlers:
             self.app.add_handler(CommandHandler(command, handler))

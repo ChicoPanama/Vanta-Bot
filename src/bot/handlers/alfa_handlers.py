@@ -4,11 +4,13 @@ from typing import Optional
 import os
 import logging
 from telegram import Update
-from telegram.ext import ContextTypes, CommandHandler
+from telegram.ext import ContextTypes, CommandHandler, CallbackQueryHandler
 from sqlalchemy import create_engine
 
 from src.services.analytics.leaderboard_service import LeaderboardService
 from src.services.contracts.avantis_registry import get_registry
+from src.bot.ui.keyboards import kb
+from src.services.copytrading import copy_service
 
 logger = logging.getLogger(__name__)
 
@@ -57,28 +59,44 @@ async def cmd_alfa(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
             return
 
         lines = ["*Top 50 (30D)* — vol / median / clean PnL / last activity / score\n"]
+        follow_buttons = []
+        
         for i, r in enumerate(rows, 1):
+            trader_address = r['address']
+            # Create a consistent trader_key for copy-trading (use full address)
+            trader_key = trader_address
+            
+            # Add shortened display key for debugging
+            display_key = trader_address[:6] + "…" + trader_address[-4:] if len(trader_address) > 10 else trader_address
+            
             lines.append(
-                f"{i:02d}. `{r['address']}` — "
+                f"{i:02d}. `{display_key}` — "
                 f"${float(r['last_30d_volume_usd']):,.0f} / "
                 f"${float(r['median_trade_size_usd']):,.0f} / "
                 f"${float(r['clean_realized_pnl_usd']):,.0f} / "
                 f"{int(r['last_trade_at'])} / "
                 f"score {r['copyability_score']}"
             )
+            follow_buttons.append([(f"➕ Follow #{i:02d}", f"cp:open:{trader_key}")])
+        
+        # Add a few more buttons for navigation
+        follow_buttons.append([("📊 My Following", "nav:following"), ("📈 Leaderboard", "nav:top50")])
         
         # Split message if too long (Telegram limit is 4096 chars)
         message = "\n".join(lines)
         if len(message) > 4000:
-            # Send in chunks
+            # Send in chunks with follow buttons on first chunk
             chunk_size = 3500
             for i in range(0, len(message), chunk_size):
                 chunk = message[i:i + chunk_size]
                 if i > 0:
                     chunk = f"*Top 50 (continued)* — vol / median / clean PnL / last activity / score\n" + chunk
-                await update.message.reply_text(chunk, parse_mode='Markdown')
+                    await update.message.reply_text(chunk, parse_mode='Markdown')
+                else:
+                    # First chunk gets the follow buttons
+                    await update.message.reply_text(chunk, parse_mode='Markdown', reply_markup=kb(follow_buttons))
         else:
-            await update.message.reply_text(message, parse_mode='Markdown')
+            await update.message.reply_text(message, parse_mode='Markdown', reply_markup=kb(follow_buttons))
             
     except Exception as e:
         logger.error(f"Error in alfa command: {e}")
@@ -122,7 +140,24 @@ async def cmd_debug_contracts(update: Update, context: ContextTypes.DEFAULT_TYPE
             parse_mode='Markdown'
         )
 
+async def cb_nav(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Handle navigation callbacks from leaderboard"""
+    q = update.callback_query
+    await q.answer()
+    
+    if q.data == "nav:following":
+        # Redirect to following command
+        from src.bot.handlers.copy_handlers import cmd_following
+        q.message.from_user = q.from_user  # Fix user reference for command
+        await cmd_following(update, context)
+    elif q.data == "nav:top50":
+        # Redirect to alfa top50
+        q.message.text = "/alfa top50"
+        q.message.from_user = q.from_user
+        await cmd_alfa(update, context)
+
 # Export handler for registration
 alfa_handlers = [
     CommandHandler("alfa", cmd_alfa),
+    CallbackQueryHandler(cb_nav, pattern=r"^nav:(following|top50)$"),
 ]

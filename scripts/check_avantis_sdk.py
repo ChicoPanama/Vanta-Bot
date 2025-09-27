@@ -15,7 +15,8 @@ from pathlib import Path
 # Add src to path for imports
 sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 
-from avantis_trader_sdk import TraderClient, TradeInput
+from avantis_trader_sdk import TraderClient
+from avantis_trader_sdk.types import TradeInput
 
 # Configure logging
 logging.basicConfig(
@@ -50,14 +51,14 @@ async def check_sdk_connection():
                 private_key = private_key[2:]
             
             client.set_local_signer(private_key)
-            trader_address = client.get_trader_address()
+            trader_address = "configured" if client.has_signer() else None
             logger.info(f"✅ Local signer configured: {trader_address}")
             
         elif aws_kms_key_id:
             logger.info("🔑 Configuring AWS KMS signer...")
             region = aws_region or 'us-east-1'
             client.set_aws_kms_signer(aws_kms_key_id, region)
-            trader_address = client.get_trader_address()
+            trader_address = "configured" if client.has_signer() else None
             logger.info(f"✅ AWS KMS signer configured: {trader_address}")
             
         else:
@@ -109,25 +110,29 @@ async def check_trade_parameters(client, trader_address):
         # Create a dummy trade input for ETH/USD
         trade_input = TradeInput(
             trader=trader_address or "0x0000000000000000000000000000000000000000",
-            open_price=None,  # Market order
             pair_index=0,  # Will be updated
-            collateral_in_trade=100.0,  # $100 collateral
-            is_long=True,
-            leverage=10.0,
-            index=0,
-            tp=None,
-            sl=None,
+            trade_index=0,
+            open_collateral=100000000,  # $100 collateral (in 6 decimals)
+            collateral_in_trade=100000000,  # $100 collateral (in 6 decimals)
+            open_price=0,  # Market order
+            is_long=True,  # Long position
+            leverage=10000000,  # 10x leverage (in 6 decimals)
+            tp=0,
+            sl=0,
             timestamp=0
         )
         
         # Try to get ETH/USD pair index first
         try:
             eth_usd_index = await client.pairs_cache.get_pair_index("ETH/USD")
-            trade_input.pair_index = eth_usd_index
+            # Update the trade input with the correct pair index
+            trade_data = trade_input.model_dump()
+            trade_data['pair_index'] = eth_usd_index
+            trade_input = TradeInput(**trade_data)
             logger.info(f"Using ETH/USD pair index: {eth_usd_index}")
         except Exception as e:
             logger.warning(f"⚠️ Could not get ETH/USD pair index, using 0: {e}")
-            trade_input.pair_index = 0
+            # Keep the default pair_index of 0
         
         # Get opening fee
         try:
