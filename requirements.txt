@@ -11,3 +11,11 @@ requests==2.31.0
 eth-account==0.10.0
 eth-typing==4.0.0
 hexbytes==1.0.0
+
+# AI/ML Dependencies for Copy Trading
+numpy>=1.26,<2
+pandas>=2.2,<2.3
+scikit-learn>=1.5,<1.6
+asyncio-throttle>=1.0.2,<1.1
+tenacity>=8.3,<9
+loguru>=0.7,<0.8

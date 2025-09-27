@@ -1,0 +1,1 @@
+# Copy Trading Tests for Vanta Bot
