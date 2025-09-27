@@ -1,11 +1,12 @@
-# 🤖 Vanta Bot - Professional Trading Bot for Avantis Protocol
+# 🤖 Vanta Bot - Production-Ready Trading Bot for Avantis Protocol
 
 [![Python](https://img.shields.io/badge/Python-3.11+-blue.svg)](https://python.org)
 [![License](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 [![Docker](https://img.shields.io/badge/Docker-Ready-blue.svg)](docker-compose.yml)
 [![Base Network](https://img.shields.io/badge/Network-Base%20L2-8B5CF6.svg)](https://base.org)
+[![Production Ready](https://img.shields.io/badge/Production-Ready-green.svg)](docs/production-hardening-checklist.md)
 
-> **Professional Telegram trading bot for the Avantis Protocol on Base network, featuring advanced trading capabilities, AI-powered copy trading, and enterprise-grade architecture.**
+> **Enterprise-grade Telegram trading bot for the Avantis Protocol on Base network, featuring 500x leveraged trading, AI-powered copy trading, and production-hardened safety mechanisms.**
 
 ## 🚀 **Quick Start**
 
@@ -33,8 +34,11 @@ pip install -r requirements.txt
 createdb vanta_bot
 alembic upgrade head
 
-# Run bot
+# Run bot (development mode)
 python main.py
+
+# Run bot (production mode with supervision)
+ENVIRONMENT=production python main.py
 ```
 
 ## ✨ **Key Features**
@@ -57,11 +61,15 @@ python main.py
 - **Background Services**: Position tracking and market indexing
 - **Comprehensive Monitoring**: Health checks, metrics, and logging
 
-### 🛡️ **Security & Reliability**
+### 🛡️ **Production-Grade Security & Safety**
+- **Leverage Safety Manager**: Risk validation for 500x leveraged trading
+- **Emergency Controls**: Global halt capabilities and maintenance modes
+- **Multi-Source Price Validation**: Reliable price feeds with fallback support
+- **Rate Limiting**: Redis-based user and system protection
+- **Structured Logging**: Trace IDs and comprehensive audit trails
+- **Health Monitoring**: Real-time system health and dependency checks
+- **Task Supervision**: Automatic restart and graceful shutdown
 - **Encrypted Storage**: Private keys encrypted with AES-256
-- **Input Validation**: Comprehensive input sanitization
-- **Rate Limiting**: Protection against abuse
-- **Error Handling**: Graceful degradation and recovery
 
 ## 📊 **Architecture Overview**
 
@@ -135,20 +143,33 @@ TELEGRAM_BOT_TOKEN=your_bot_token
 DATABASE_URL=postgresql://user:pass@localhost/db
 REDIS_URL=redis://localhost:6379
 
+# Admin Controls (Production Safety)
+ADMIN_USER_IDS=123456789,987654321
+SUPER_ADMIN_IDS=123456789
+
+# Risk Management (500x Leverage Safety)
+MAX_POSITION_SIZE_USD=100000
+MAX_ACCOUNT_RISK_PCT=0.10
+LIQUIDATION_BUFFER_PCT=0.05
+MAX_DAILY_LOSS_PCT=0.20
+
 # Blockchain
 BASE_RPC_URL=https://mainnet.base.org
 AVANTIS_TRADING_CONTRACT=0x...
 ENCRYPTION_KEY=your_encryption_key
 
-# Copy Trading
+# Execution & Monitoring
 COPY_EXECUTION_MODE=DRY  # or LIVE
-TRADER_PRIVATE_KEY=your_private_key
+DEFAULT_EXECUTION_MODE=DRY
+HEALTH_PORT=8080
+LOG_JSON=true  # Production logging
 ```
 
 See [Configuration Guide](docs/configuration.md) for complete setup.
 
 ## 📚 **Documentation**
 
+- **[Production Hardening Checklist](docs/production-hardening-checklist.md)** - Production readiness guide
 - **[Installation Guide](docs/installation.md)** - Complete setup instructions
 - **[Configuration](docs/configuration.md)** - Environment and settings
 - **[Architecture](docs/architecture.md)** - System design and structure
@@ -156,9 +177,24 @@ See [Configuration Guide](docs/configuration.md) for complete setup.
 - **[Troubleshooting](docs/troubleshooting.md)** - Common issues and solutions
 - **[API Reference](docs/api-reference.md)** - Service documentation
 
-## 🚀 **Deployment**
+## 🏭 **Production Deployment**
 
-### **Production Deployment**
+### **Production Mode (Recommended)**
+```bash
+# Production mode with supervision and safety features
+ENVIRONMENT=production python main.py
+
+# Health Check
+curl http://localhost:8080/healthz
+
+# Detailed readiness check
+curl http://localhost:8080/readyz
+
+# System metrics
+curl http://localhost:8080/metrics
+```
+
+### **Docker Deployment**
 ```bash
 # Using Docker Compose
 docker-compose -f docker-compose.yml up -d
@@ -170,31 +206,50 @@ curl http://localhost:8080/healthz
 docker-compose logs -f vanta-bot
 ```
 
+### **Production Features**
+- **Task Supervision**: Automatic restart with exponential backoff
+- **Health Monitoring**: Real-time system health and dependency checks
+- **Emergency Controls**: Global halt and maintenance mode capabilities
+- **Risk Management**: 500x leverage safety validation
+- **Structured Logging**: Trace IDs and comprehensive audit trails
+- **Rate Limiting**: User and system protection with Redis
+
 ### **Environment Setup**
 - **Development**: Use `env.example` as template
-- **Production**: Set all required environment variables
-- **Monitoring**: Enable metrics and health checks
+- **Production**: Set all required environment variables including admin IDs
+- **Monitoring**: Enable metrics, health checks, and structured logging
+- **Safety**: Configure risk management parameters and emergency controls
 
-See [Deployment Guide](docs/deployment.md) for detailed instructions.
+See [Production Hardening Checklist](docs/production-hardening-checklist.md) for complete deployment guide.
 
 ## 📊 **Monitoring & Observability**
 
-### **Health Checks**
-- **Endpoint**: `http://localhost:8080/healthz`
-- **Database**: Connection and query health
-- **Redis**: Cache service status
-- **Blockchain**: RPC connectivity
+### **Health & Monitoring Endpoints**
+- **Basic Health**: `GET /healthz` - Service availability
+- **Readiness Check**: `GET /readyz` - Dependency validation
+- **System Metrics**: `GET /metrics` - Performance data
+- **Alternative**: `GET /health` - Basic health check
 
-### **Metrics**
-- **Trading**: Trades executed, success rate, P&L
-- **Performance**: Response times, cache hit rates
-- **Users**: Active users, command usage
-- **System**: Memory, CPU, database connections
+### **Health Monitoring**
+- **Database**: Connection and query performance
+- **Redis**: Cache service status and response times
+- **Blockchain**: RPC connectivity and block height
+- **Price Feeds**: Multi-source validation and freshness
+- **Telegram API**: Bot connectivity and authentication
 
-### **Logging**
-- **Structured Logs**: JSON format with context
-- **Log Levels**: DEBUG, INFO, WARNING, ERROR
-- **Rotation**: Automatic log rotation and cleanup
+### **Production Metrics**
+- **Risk Management**: Position sizes, leverage usage, risk scores
+- **Trading Performance**: Execution success rates, P&L tracking
+- **System Performance**: CPU, memory, disk usage
+- **User Activity**: Rate limiting, command usage patterns
+- **Safety Events**: Emergency stops, risk limit violations
+
+### **Structured Logging**
+- **Trace IDs**: Request tracking across all components
+- **JSON Format**: Production-ready structured logs
+- **Context Variables**: Thread-safe trace propagation
+- **Audit Trail**: All admin actions and system events logged
+- **Log Levels**: DEBUG, INFO, WARNING, ERROR with rotation
 
 ## 🧪 **Testing**
 
@@ -212,18 +267,31 @@ pytest --cov=src tests/
 
 ## 🔒 **Security**
 
-### **Key Features**
+### **Production Safety Features**
+- **Leverage Safety Manager**: Risk validation for 500x leveraged trading
+- **Emergency Controls**: Global halt capabilities and maintenance modes
+- **Multi-Source Price Validation**: Prevents price manipulation attacks
+- **Rate Limiting**: Redis-based protection against abuse
+- **Admin Permissions**: Role-based access control with audit trails
+- **Task Supervision**: Automatic restart and graceful shutdown
 - **Encrypted Storage**: AES-256 encryption for private keys
 - **Input Validation**: Comprehensive input sanitization
-- **Rate Limiting**: Protection against abuse
 - **SQL Injection Protection**: Parameterized queries
-- **Error Handling**: Secure error responses
+
+### **Risk Management**
+- **Position Limits**: Maximum $100,000 per position
+- **Account Risk**: Maximum 10% account risk per position
+- **Liquidation Buffer**: 5% buffer before liquidation
+- **Daily Loss Limits**: Maximum 20% daily loss protection
+- **Leverage Validation**: Up to 500x with safety checks
 
 ### **Best Practices**
-- Use environment variables for secrets
-- Enable HTTPS in production
-- Regular security updates
-- Monitor for suspicious activity
+- Configure admin user IDs before deployment
+- Use environment variables for all secrets
+- Enable structured JSON logging in production
+- Monitor health endpoints continuously
+- Regular security updates and dependency checks
+- Test emergency controls in staging environment
 
 ## 🤝 **Contributing**
 

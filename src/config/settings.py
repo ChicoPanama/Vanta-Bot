@@ -103,16 +103,40 @@ class Config:
         
         # Admin Controls
         self.ADMIN_USER_IDS = self._parse_admin_user_ids()
+        self.SUPER_ADMIN_IDS = self._parse_super_admin_user_ids()
         
         # Emergency Controls
         self.EMERGENCY_STOP = os.getenv('EMERGENCY_STOP', 'false').lower() == 'true'
         self.EMERGENCY_STOP_COPY_TRADING = os.getenv('EMERGENCY_STOP_COPY_TRADING', 'false').lower() == 'true'
         self.PAUSE_NEW_FOLLOWS = os.getenv('PAUSE_NEW_FOLLOWS', 'false').lower() == 'true'
         self.MAINTENANCE_MODE = os.getenv('MAINTENANCE_MODE', 'false').lower() == 'true'
+        
+        # Risk Management
+        self.MAX_POSITION_SIZE_USD = int(os.getenv('MAX_POSITION_SIZE_USD', '100000'))
+        self.MAX_ACCOUNT_RISK_PCT = float(os.getenv('MAX_ACCOUNT_RISK_PCT', '0.10'))
+        self.LIQUIDATION_BUFFER_PCT = float(os.getenv('LIQUIDATION_BUFFER_PCT', '0.05'))
+        self.MAX_DAILY_LOSS_PCT = float(os.getenv('MAX_DAILY_LOSS_PCT', '0.20'))
+        
+        # Health Monitoring
+        self.HEALTH_PORT = int(os.getenv('HEALTH_PORT', '8080'))
+        
+        # Execution Mode
+        self.DEFAULT_EXECUTION_MODE = os.getenv('DEFAULT_EXECUTION_MODE', 'DRY').upper()
     
     def _parse_admin_user_ids(self) -> List[int]:
         """Parse admin user IDs from environment variable"""
         admin_ids_str = os.getenv('ADMIN_USER_IDS', '')
+        if not admin_ids_str:
+            return []
+        
+        try:
+            return [int(uid.strip()) for uid in admin_ids_str.split(',') if uid.strip()]
+        except ValueError:
+            return []
+    
+    def _parse_super_admin_user_ids(self) -> List[int]:
+        """Parse super admin user IDs from environment variable"""
+        admin_ids_str = os.getenv('SUPER_ADMIN_IDS', '')
         if not admin_ids_str:
             return []
         

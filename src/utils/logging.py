@@ -1,16 +1,21 @@
 """
 Structured Logging Configuration
-Centralized logging setup for the Vanta Bot
+Centralized logging setup for the Vanta Bot with trace ID support
 """
 
 import logging
 import sys
 import json
+import uuid
+import contextvars
 from typing import Any, Dict, Optional
-from datetime import datetime
+from datetime import datetime, timezone
 from loguru import logger
 
 from src.config.settings import settings
+
+# Context variable for trace ID
+trace_id_var: contextvars.ContextVar[str] = contextvars.ContextVar('trace_id', default='')
 
 
 class StructuredFormatter:
@@ -22,7 +27,7 @@ class StructuredFormatter:
     def format(self, record: Dict[str, Any]) -> str:
         """Format log record as structured JSON"""
         log_entry = {
-            "timestamp": datetime.utcnow().isoformat() + "Z",
+            "timestamp": datetime.now(timezone.utc).isoformat(),
             "level": record["level"].name,
             "service": self.service_name,
             "env": settings.ENVIRONMENT,
@@ -31,6 +36,7 @@ class StructuredFormatter:
             "module": record["name"],
             "function": record["function"],
             "line": record["line"],
+            "trace_id": trace_id_var.get(''),
         }
         
         # Add extra fields if present
@@ -86,6 +92,7 @@ def setup_logging() -> None:
             "<green>{time:YYYY-MM-DD HH:mm:ss}</green> | "
             "<level>{level: <8}</level> | "
             "<cyan>{name}</cyan>:<cyan>{function}</cyan>:<cyan>{line}</cyan> | "
+            "<yellow>[{extra[trace_id]}]</yellow> | "
             "<level>{message}</level>"
         )
         
@@ -246,6 +253,27 @@ def log_performance(
         "success": success,
         **kwargs
     })
+
+
+def set_trace_id(trace_id: str = None) -> str:
+    """Set trace ID for current context. Returns the trace ID."""
+    if trace_id is None:
+        trace_id = str(uuid.uuid4())[:8]
+    trace_id_var.set(trace_id)
+    return trace_id
+
+
+def get_trace_id() -> str:
+    """Get current trace ID."""
+    return trace_id_var.get('')
+
+
+def log_with_context(logger_instance, level: str, message: str, **kwargs):
+    """Log with additional context fields."""
+    log_func = getattr(logger_instance, level.lower())
+    extra = {k: v for k, v in kwargs.items() if k not in ['message', 'level']}
+    extra['trace_id'] = get_trace_id()
+    log_func(message, extra=extra)
 
 
 # Initialize logging when module is imported
