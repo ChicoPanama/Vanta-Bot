@@ -1,0 +1,13 @@
+python-telegram-bot[job-queue]==20.7
+web3==6.15.1
+python-dotenv==1.0.0
+aiohttp==3.9.1
+sqlalchemy==2.0.25
+alembic==1.13.1
+psycopg2-binary==2.9.9
+redis==5.0.1
+cryptography==42.0.0
+requests==2.31.0
+eth-account==0.10.0
+eth-typing==4.0.0
+hexbytes==1.0.0

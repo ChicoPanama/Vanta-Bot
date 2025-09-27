@@ -1,0 +1,18 @@
+[Unit]
+Description=Vanta Bot
+After=network.target postgresql.service redis.service
+
+[Service]
+Type=simple
+User=avantis
+Group=avantis
+WorkingDirectory=/opt/vanta-bot
+Environment=PATH=/opt/vanta-bot/vanta_env/bin
+ExecStart=/opt/vanta-bot/vanta_env/bin/python main.py
+Restart=always
+RestartSec=10
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target
