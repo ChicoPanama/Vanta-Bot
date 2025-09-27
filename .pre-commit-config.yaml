@@ -26,3 +26,37 @@ repos:
   hooks:
   - id: end-of-file-fixer
   - id: trailing-whitespace
+
+  - repo: https://github.com/PyCQA/bandit
+    rev: 1.7.9
+    hooks:
+      - id: bandit
+        args: ["-r", "src", "-lll", "-x", "tests"]
+
+  - repo: https://github.com/pyupio/safety
+    rev: 3.2.7
+    hooks:
+      - id: safety
+        args: ["check", "--full-report"]
+        files: "^pyproject\\.toml$|^requirements(\\.txt)?$"
+
+  # Local pattern guards (fast, opinionated, and effective)
+  - repo: local
+    hooks:
+      - id: forbid-pickle
+        name: Forbid pickle in src
+        entry: bash -c 'git grep -nE "(^|\\s)(import|from)\\s+pickle(\\s|\\.)" -- src && echo "pickle import found — use json or msgpack" && exit 1 || exit 0'
+        language: system
+        pass_filenames: false
+
+      - id: require-aiohttp-timeout
+        name: Require aiohttp ClientTimeout
+        entry: bash -c 'git grep -n "aiohttp.ClientSession()" -- src && echo "ClientSession without ClientTimeout — use a shared session with timeouts" && exit 1 || exit 0'
+        language: system
+        pass_filenames: false
+
+      - id: forbid-fstring-sql
+        name: Forbid f-string SQL
+        entry: bash -c 'git grep -nE "f\\s*[\\\"\\\']\\s*(SELECT|INSERT|UPDATE|DELETE)" -- src && echo "f-string SQL detected — use parameterized SQLAlchemy binds" && exit 1 || exit 0'
+        language: system
+        pass_filenames: false

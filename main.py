@@ -9,6 +9,7 @@ from typing import Optional
 
 from src.config.settings import settings
 from src.config.flags import flags
+from src.config.validate import validate_all
 from src.utils.logging import get_logger, setup_logging, set_trace_id
 from src.utils.errors import handle_exception
 from src.bot.application import create_bot_application
@@ -80,6 +81,11 @@ async def start_production_services() -> None:
 def main():
     """Start the bot"""
     try:
+        # Validate critical secrets and configuration first
+        logger.info("🔐 Validating critical secrets and configuration...")
+        validate_all()
+        logger.info("✅ Configuration validation passed")
+        
         # Log startup information
         trace_id = set_trace_id()
         logger.info("🚀 Starting Vanta Bot with Production Hardening...", extra={'trace_id': trace_id})

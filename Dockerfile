@@ -22,15 +22,17 @@ RUN pip install --no-cache-dir --user -r requirements.txt
 # Production stage
 FROM python:3.11-slim as production
 
-# Install runtime dependencies
+# Install runtime dependencies and security packages
 RUN apt-get update && apt-get install -y \
     libpq5 \
     curl \
+    ca-certificates \
     && rm -rf /var/lib/apt/lists/* \
-    && apt-get clean
+    && apt-get clean \
+    && apt-get autoremove -y
 
-# Create non-root user
-RUN groupadd -r vanta && useradd -r -g vanta vanta
+# Create non-root user with specific UID/GID for security
+RUN groupadd -r -g 10001 vanta && useradd -r -g vanta -u 10001 vanta
 
 # Set working directory
 WORKDIR /app
@@ -45,15 +47,25 @@ COPY --chown=vanta:vanta migrations/ ./migrations/
 COPY --chown=vanta:vanta main.py ./
 COPY --chown=vanta:vanta pyproject.toml ./
 
-# Create necessary directories
-RUN mkdir -p /app/logs /app/data && \
-    chown -R vanta:vanta /app
+# Create necessary directories with proper permissions
+RUN mkdir -p /app/logs /app/data /app/tmp && \
+    chown -R vanta:vanta /app && \
+    chmod -R 755 /app && \
+    chmod 700 /app/tmp
 
-# Set environment variables
+# Set environment variables for security and performance
 ENV PYTHONPATH=/app
 ENV PYTHONUNBUFFERED=1
 ENV PYTHONDONTWRITEBYTECODE=1
+ENV PYTHONHASHSEED=random
 ENV PATH=/home/vanta/.local/bin:$PATH
+
+# Security labels
+LABEL org.opencontainers.image.title="Vanta Bot"
+LABEL org.opencontainers.image.description="Professional Trading Bot for Avantis Protocol"
+LABEL org.opencontainers.image.vendor="Vanta Bot Team"
+LABEL org.opencontainers.image.source="https://github.com/ChicoPanama/Vanta-Bot"
+LABEL security.scanning="enabled"
 
 # Switch to non-root user
 USER vanta
