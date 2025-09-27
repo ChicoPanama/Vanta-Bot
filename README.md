@@ -6,6 +6,10 @@ A professional Telegram trading bot for the Avantis Protocol on Base network, fe
 [![Telegram](https://img.shields.io/badge/Telegram-Bot-blue.svg)](https://telegram.org)
 [![Avantis](https://img.shields.io/badge/Avantis-Protocol-green.svg)](https://avantis.trade)
 [![Base](https://img.shields.io/badge/Base-Network-blue.svg)](https://base.org)
+[![License](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![Release](https://img.shields.io/badge/Release-v1.0.0-green.svg)](https://github.com/ChicoPanama/Vanta-Bot/releases)
+[![CI/CD](https://github.com/ChicoPanama/Vanta-Bot/workflows/CI/CD%20Pipeline/badge.svg)](https://github.com/ChicoPanama/Vanta-Bot/actions)
+[![Docker](https://img.shields.io/badge/Docker-Ready-blue.svg)](https://hub.docker.com)
 
 ## ✨ Features
 
@@ -51,8 +55,8 @@ A professional Telegram trading bot for the Avantis Protocol on Base network, fe
 ### 1. Clone and Setup
 
 ```bash
-git clone <repository-url>
-cd vanta-bot
+git clone https://github.com/ChicoPanama/Vanta-Bot.git
+cd Vanta-Bot
 python scripts/setup.py
 ```
 
