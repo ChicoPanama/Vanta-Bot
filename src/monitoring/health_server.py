@@ -142,7 +142,11 @@ class HealthChecker:
             start = time.time()
             url = f"https://api.telegram.org/bot{settings.TELEGRAM_BOT_TOKEN}/getMe"
             
-            async with aiohttp.ClientSession() as session:
+            # FIX: Add timeout to prevent hanging connections
+            # REASON: ClientSession without timeout can hang indefinitely
+            # REVIEW: Line 145 from code review - aiohttp.ClientSession without timeout
+            timeout = aiohttp.ClientTimeout(total=10, connect=5)
+            async with aiohttp.ClientSession(timeout=timeout) as session:
                 async with session.get(url, timeout=5) as response:
                     duration = time.time() - start
                     

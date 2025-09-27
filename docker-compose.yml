@@ -9,7 +9,7 @@ services:
     restart: unless-stopped
     environment:
       # Database
-      - DATABASE_URL=postgresql://vanta_user:vanta_password@postgres:5432/vanta_bot
+      - DATABASE_URL=${DATABASE_URL:-postgresql://vanta_user:vanta_password@postgres:5432/vanta_bot}
       - REDIS_URL=redis://redis:6379/0
       
       # Telegram
@@ -79,9 +79,9 @@ services:
     container_name: vanta-postgres
     restart: unless-stopped
     environment:
-      POSTGRES_DB: vanta_bot
-      POSTGRES_USER: vanta_user
-      POSTGRES_PASSWORD: vanta_password
+      POSTGRES_DB: ${POSTGRES_DB:-vanta_bot}
+      POSTGRES_USER: ${POSTGRES_USER:-vanta_user}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-vanta_password}
       POSTGRES_INITDB_ARGS: "--encoding=UTF-8 --lc-collate=C --lc-ctype=C"
     volumes:
       - postgres_data:/var/lib/postgresql/data

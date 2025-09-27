@@ -206,7 +206,8 @@ class AvantisIndexer:
         """
         try:
             data = dict(log["args"]) if "args" in log and isinstance(log["args"], dict) else {}
-        except Exception:
+        except Exception as e:
+            logger.warning(f"Error parsing log args: {e}")
             data = {}
             
         block_number = log.get("blockNumber", 0) or 0
@@ -318,7 +319,8 @@ class AvantisIndexer:
         try:
             blk = self.w3_http.eth.get_block(block_number)
             return int(blk["timestamp"])
-        except Exception:
+        except Exception as e:
+            logger.warning(f"Error getting block timestamp for {block_number}: {e}")
             return int(time.time())
 
     def set_callbacks(self, on_fill=None, on_position=None):

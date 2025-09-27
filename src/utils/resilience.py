@@ -62,6 +62,7 @@ async def guarded_call(
         res = await with_retries(lambda: with_timeout(fn(), timeout_s), retries=retries)
         breaker.mark_success()
         return res
-    except Exception:
+    except Exception as e:
         breaker.mark_failure()
+        logger.warning(f"Circuit breaker failure in {func.__name__}: {e}")
         raise

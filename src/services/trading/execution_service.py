@@ -25,7 +25,8 @@ try:
         get_allowance,
     )
     SDK_AVAILABLE = True
-except Exception:
+except Exception as e:
+    logger.warning(f"Avantis SDK import failed: {e}")
     SDK_AVAILABLE = False
 
 
@@ -292,7 +293,8 @@ class ExecutionService:
                     "pnl_usd": str(pnl) if pnl is not None else None,
                 })
             return normalized
-        except Exception:
+        except Exception as e:
+            logger.error(f"Error normalizing positions: {e}")
             return []
 
     async def execute_close(

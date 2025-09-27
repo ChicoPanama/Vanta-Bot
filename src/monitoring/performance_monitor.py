@@ -299,7 +299,8 @@ class PerformanceMonitor:
             async with self.db_pool.acquire() as conn:
                 result = await conn.fetchval("SELECT 1")
                 return 1 if result == 1 else 0
-        except Exception:
+        except Exception as e:
+            logger.warning(f"Database health check failed: {e}")
             return 0
     
     async def _check_database_health_detailed(self) -> HealthCheck:
@@ -352,7 +353,8 @@ class PerformanceMonitor:
         try:
             await self.redis.ping()
             return 1
-        except Exception:
+        except Exception as e:
+            logger.warning(f"Redis health check failed: {e}")
             return 0
     
     async def _check_redis_health_detailed(self) -> HealthCheck:

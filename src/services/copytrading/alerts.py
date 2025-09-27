@@ -26,7 +26,8 @@ def _get_redis_client():
                 _redis_client.ping()
             else:
                 _redis_client = False  # Mark as unavailable
-        except Exception:
+        except Exception as e:
+            logger.warning(f"Redis connection failed: {e}")
             _redis_client = False  # Mark as unavailable
     return _redis_client if _redis_client is not False else None
 
@@ -44,8 +45,9 @@ def _is_notification_deduplicated(notification_key: str) -> bool:
             # Set in Redis with 5min TTL
             redis_client.setex(f"copy_alert_dedup:{notification_key}", 300, "1")
             return False
-        except Exception:
+        except Exception as e:
             # Fall back to in-memory if Redis fails
+            logger.warning(f"Redis deduplication failed, using in-memory fallback: {e}")
             pass
     
     # In-memory fallback
@@ -67,8 +69,8 @@ async def send_daily_digest(bot: Bot, uid: int):
     lines.append(f"• `{tk}` — Auto: {'ON' if cfg.get('auto_copy') else 'OFF'}  Notify: {'ON' if cfg.get('notify') else 'OFF'}")
   try:
     await bot.send_message(chat_id=uid, text="\n".join(lines), parse_mode="Markdown")
-  except Exception:
-    log.exception("digest_send_fail")
+  except Exception as e:
+    log.exception(f"Failed to send digest to user {uid}: {e}")
 
 async def digest_scheduler(bot: Bot, user_ids: List[int], hour_utc: int = 0):
   while True:

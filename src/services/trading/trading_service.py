@@ -135,5 +135,6 @@ class TradingService(BaseService):
         try:
             validate_position_data(data)
             return True
-        except Exception:
+        except Exception as e:
+            logger.warning(f"Position validation failed: {e}")
             return False

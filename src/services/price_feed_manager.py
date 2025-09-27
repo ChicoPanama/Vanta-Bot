@@ -230,7 +230,11 @@ class PriceFeedManager:
                 if api_key:
                     headers['x-cg-demo-api-key'] = api_key
                 
-                async with aiohttp.ClientSession() as session:
+                # FIX: Add timeout to prevent hanging connections
+                # REASON: ClientSession without timeout can hang indefinitely
+                # REVIEW: Line 233 from code review - aiohttp.ClientSession without timeout
+                timeout = aiohttp.ClientTimeout(total=10, connect=5)
+                async with aiohttp.ClientSession(timeout=timeout) as session:
                     async with session.get(url, params=params, headers=headers, timeout=5) as response:
                         if response.status == 200:
                             data = await response.json()

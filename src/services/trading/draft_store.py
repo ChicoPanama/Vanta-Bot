@@ -4,7 +4,8 @@ from decimal import Decimal
 from typing import Optional
 try:
     import aioredis  # aioredis==2+
-except Exception:
+except Exception as e:
+    logger.warning(f"aioredis import failed: {e}")
     aioredis = None
 
 from src.services.trading.trade_drafts import TradeDraft, DraftStore as MemoryStore

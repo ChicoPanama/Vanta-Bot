@@ -37,7 +37,8 @@ def _positions_text(positions):
         if pnl is not None:
             try:
                 row += f"  pnl:{fmt_usd(Decimal(pnl))}"
-            except Exception:
+            except Exception as e:
+                logger.warning(f"Failed to format PnL value {pnl}: {e}")
                 row += f"  pnl:{pnl}"
         if entry is not None:
             row += f"  entry:{entry}"

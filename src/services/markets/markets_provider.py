@@ -6,7 +6,8 @@ from decimal import Decimal
 try:
     # Adjust imports if your SDK wrapper lives elsewhere
     from src.integrations.avantis.sdk_client import get_pairs_cache, get_price_for_pair
-except Exception:
+except Exception as e:
+    logger.warning(f"Avantis SDK client import failed: {e}")
     get_pairs_cache = None
     get_price_for_pair = None
 
@@ -36,7 +37,8 @@ async def list_pairs(page: int = 0, page_size: int = 6) -> Tuple[List[str], int]
                 sym = getattr(p, "symbol", None) or getattr(p, "pair", None) or str(p)
                 symbols.append(str(sym))
             pairs = [s for s in symbols if s] or FALLBACK_PAIRS
-        except Exception:
+        except Exception as e:
+            logger.warning(f"Error getting pairs from SDK: {e}")
             pairs = FALLBACK_PAIRS
     else:
         pairs = FALLBACK_PAIRS
@@ -54,6 +56,7 @@ async def get_last_price(pair: str) -> Optional[Decimal]:
         try:
             px = await get_price_for_pair(pair)
             return Decimal(str(px)) if px is not None else None
-        except Exception:
+        except Exception as e:
+            logger.warning(f"Error getting price for pair {pair}: {e}")
             return None
     return None

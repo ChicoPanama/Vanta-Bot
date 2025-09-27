@@ -4,7 +4,6 @@ Redis-based caching for improved performance
 """
 
 import json
-import pickle
 from typing import Any, Optional, Union, Dict, List
 from functools import wraps
 import asyncio
@@ -57,7 +56,10 @@ class CacheService:
         try:
             value = await self.redis.get(key)
             if value:
-                return pickle.loads(value)
+                # FIX: Replace unsafe pickle with safe JSON serialization
+                # REASON: pickle.loads() can execute arbitrary code - security vulnerability
+                # REVIEW: Line 60 from code review - pickle load (unsafe with untrusted data)
+                return json.loads(value.decode('utf-8'))
             return None
         except Exception as e:
             logger.warning(f"Cache get error for key {key}: {e}")
@@ -69,7 +71,10 @@ class CacheService:
             return False
         
         try:
-            serialized_value = pickle.dumps(value)
+            # FIX: Replace unsafe pickle with safe JSON serialization
+            # REASON: pickle.dumps() can serialize unsafe objects - security vulnerability
+            # REVIEW: Line 75 from code review - pickle dumps (unsafe with untrusted data)
+            serialized_value = json.dumps(value, default=str).encode('utf-8')
             
             if ttl:
                 await self.redis.setex(key, ttl, serialized_value)

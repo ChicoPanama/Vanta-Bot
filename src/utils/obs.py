@@ -12,7 +12,8 @@ try:
         SENTRY = True
     else:
         SENTRY = False
-except Exception:
+except Exception as e:
+    logger.warning(f"Sentry initialization failed: {e}")
     SENTRY = False
 
 class JsonFormatter(logging.Formatter):
@@ -45,5 +46,6 @@ def log_exc(e: Exception, context: Optional[Dict[str, Any]] = None):
         try:
             import sentry_sdk
             sentry_sdk.capture_exception(e)
-        except Exception:
+        except Exception as sentry_error:
+            logger.warning(f"Failed to send error to Sentry: {sentry_error}")
             pass

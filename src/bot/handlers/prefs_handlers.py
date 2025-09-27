@@ -46,17 +46,20 @@ async def cb_prefs(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if kind == "slip":
         try:
             p["default_slippage_pct"] = float(value)
-        except Exception:
+        except (ValueError, TypeError) as e:
+            logger.warning(f"Invalid slippage value '{value}': {e}")
             pass
     elif kind == "lev":
         try:
             p["lev_presets"] = [int(x) for x in value.split(",")]
-        except Exception:
+        except (ValueError, TypeError) as e:
+            logger.warning(f"Invalid leverage presets '{value}': {e}")
             pass
     elif kind == "col":
         try:
             p["collateral_presets"] = [int(x) for x in value.split(",")]
-        except Exception:
+        except (ValueError, TypeError) as e:
+            logger.warning(f"Invalid collateral presets '{value}': {e}")
             pass
     elif kind == "fav":
         p["ui_favorites"] = value.split(",")

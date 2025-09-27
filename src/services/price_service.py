@@ -13,7 +13,11 @@ class PriceService:
     async def fetch_prices(self):
         """Fetch prices from CoinGecko API"""
         try:
-            async with aiohttp.ClientSession() as session:
+            # FIX: Add timeout to prevent hanging connections
+            # REASON: ClientSession without timeout can hang indefinitely
+            # REVIEW: Line 16 from code review - aiohttp.ClientSession without timeout
+            timeout = aiohttp.ClientTimeout(total=10, connect=5)
+            async with aiohttp.ClientSession(timeout=timeout) as session:
                 # Crypto prices
                 crypto_url = "https://api.coingecko.com/api/v3/simple/price?ids=bitcoin,ethereum,solana&vs_currencies=usd"
                 async with session.get(crypto_url) as response:

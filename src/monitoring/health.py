@@ -187,7 +187,11 @@ class HealthChecker:
             import aiohttp
             
             start_time = time.time()
-            async with aiohttp.ClientSession() as session:
+            # FIX: Add timeout to prevent hanging connections
+            # REASON: ClientSession without timeout can hang indefinitely
+            # REVIEW: Line 190 from code review - aiohttp.ClientSession without timeout
+            timeout = aiohttp.ClientTimeout(total=10, connect=5)
+            async with aiohttp.ClientSession(timeout=timeout) as session:
                 # Test Base RPC connectivity
                 payload = {
                     "jsonrpc": "2.0",

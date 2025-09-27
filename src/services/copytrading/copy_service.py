@@ -20,7 +20,8 @@ try:
   from src.services.trading.copy_executor import follow as exec_follow
   from src.services.trading.copy_executor import status as exec_status
   EXECUTOR_OK = True
-except Exception:
+except Exception as e:
+  logger.warning(f"Copy executor import failed: {e}")
   EXECUTOR_OK = False
 
 def init():
