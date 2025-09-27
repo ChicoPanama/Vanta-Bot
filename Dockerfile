@@ -1,40 +1,69 @@
-# Use Python 3.11 slim image for smaller size
-FROM python:3.11-slim
+# Multi-stage build for production optimization
+FROM python:3.11-slim as builder
+
+# Set build arguments
+ARG BUILDPLATFORM
+ARG TARGETPLATFORM
+
+# Install build dependencies
+RUN apt-get update && apt-get install -y \
+    gcc \
+    g++ \
+    libpq-dev \
+    && rm -rf /var/lib/apt/lists/*
 
 # Set working directory
 WORKDIR /app
 
-# Install system dependencies
+# Copy requirements and install dependencies
+COPY requirements.txt pyproject.toml ./
+RUN pip install --no-cache-dir --user -r requirements.txt
+
+# Production stage
+FROM python:3.11-slim as production
+
+# Install runtime dependencies
 RUN apt-get update && apt-get install -y \
-    gcc \
-    g++ \
-    && rm -rf /var/lib/apt/lists/*
+    libpq5 \
+    curl \
+    && rm -rf /var/lib/apt/lists/* \
+    && apt-get clean
 
-# Copy requirements first for better caching
-COPY requirements.txt .
+# Create non-root user
+RUN groupadd -r vanta && useradd -r -g vanta vanta
 
-# Install Python dependencies
-RUN pip install --no-cache-dir -r requirements.txt
+# Set working directory
+WORKDIR /app
+
+# Copy Python dependencies from builder
+COPY --from=builder /root/.local /home/vanta/.local
 
 # Copy application code
-COPY . .
+COPY --chown=vanta:vanta src/ ./src/
+COPY --chown=vanta:vanta config/ ./config/
+COPY --chown=vanta:vanta migrations/ ./migrations/
+COPY --chown=vanta:vanta main.py ./
+COPY --chown=vanta:vanta pyproject.toml ./
 
-# Create logs directory
-RUN mkdir -p /app/logs
-
-# Create data directory
-RUN mkdir -p /app/data
+# Create necessary directories
+RUN mkdir -p /app/logs /app/data && \
+    chown -R vanta:vanta /app
 
 # Set environment variables
 ENV PYTHONPATH=/app
 ENV PYTHONUNBUFFERED=1
+ENV PYTHONDONTWRITEBYTECODE=1
+ENV PATH=/home/vanta/.local/bin:$PATH
+
+# Switch to non-root user
+USER vanta
 
 # Expose port for health checks
 EXPOSE 8080
 
 # Health check
 HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
-    CMD python -c "import requests; requests.get('http://localhost:8080/health', timeout=5)"
+    CMD curl -f http://localhost:8080/healthz || exit 1
 
 # Run the application
 CMD ["python", "main.py"]

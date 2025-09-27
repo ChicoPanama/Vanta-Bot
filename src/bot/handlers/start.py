@@ -1,13 +1,16 @@
+from typing import Optional
 from telegram import Update
 from telegram.ext import ContextTypes
+
 from src.database.operations import db
 from src.blockchain.wallet_manager import wallet_manager
 from src.bot.keyboards.trading_keyboards import get_main_menu_keyboard, get_user_type_keyboard
-import logging
+from src.bot.constants import WELCOME_MESSAGE
+from src.utils.logging import get_logger
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
-async def start_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
+async def start_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Handle /start command with user type selection"""
     user = update.effective_user
     
@@ -27,19 +30,7 @@ async def start_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 encrypted_private_key=wallet['encrypted_private_key']
             )
             
-            welcome_msg = f"""
-🚀 **Welcome to Vanta Bot!**
-
-Your trading wallet has been created:
-📍 **Address:** `{wallet['address']}`
-
-💡 **Choose your trading experience level:**
-• 🟢 **Simple Trader** - Easy one-click trading
-• 🔴 **Advanced Trader** - Professional tools
-
-🛡️ **Security:** Your private keys are encrypted and stored securely.
-⚡ **Zero Fees:** Pay fees only on profitable trades!
-            """
+            welcome_msg = WELCOME_MESSAGE.format(wallet_address=wallet['address'])
             
         except Exception as e:
             logger.error(f"Error creating wallet for user {user.id}: {e}")
@@ -92,7 +83,7 @@ Choose your preferred trading interface:
         reply_markup=keyboard
     )
 
-async def help_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
+async def help_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Handle /help command"""
     help_text = """
 🤖 **Vanta Bot Help**

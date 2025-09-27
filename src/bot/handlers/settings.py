@@ -1,11 +1,15 @@
-from telegram import Update
+from typing import List, Dict, Any
+from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import ContextTypes
+
 from src.database.operations import db
 from src.bot.keyboards.trading_keyboards import get_main_menu_keyboard
-from telegram import InlineKeyboardButton, InlineKeyboardMarkup
-import logging
+from src.bot.middleware.user_middleware import UserMiddleware
+from src.bot.constants import SETTINGS_CATEGORIES
+from src.utils.logging import get_logger
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
+user_middleware = UserMiddleware()
 
 def get_settings_keyboard():
     keyboard = [
@@ -19,18 +23,10 @@ def get_settings_keyboard():
     ]
     return InlineKeyboardMarkup(keyboard)
 
-async def settings_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
+@user_middleware.require_user
+async def settings_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Handle settings command/callback"""
-    user_id = update.effective_user.id
-    
-    # Get user from database  
-    db_user = db.get_user(user_id)
-    if not db_user:
-        if update.callback_query:
-            await update.callback_query.answer("❌ User not found")
-        else:
-            await update.message.reply_text("❌ User not found. Please /start first.")
-        return
+    db_user = context.user_data['db_user']
         
     settings_text = """
 ⚙️ **Bot Settings**
@@ -53,7 +49,7 @@ Choose a category to modify:
             reply_markup=get_settings_keyboard()
         )
 
-async def settings_notifications_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
+async def settings_notifications_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Handle notifications settings"""
     query = update.callback_query
     await query.answer()

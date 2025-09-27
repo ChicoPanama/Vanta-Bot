@@ -32,7 +32,10 @@ joblib>=1.4,<1.5
 # Async Utilities
 asyncio-throttle>=1.0.2,<1.1
 tenacity>=8.3,<9
-websockets>=12.0,<13.0
+websockets==12.0
+
+# Avantis Trader SDK
+avantis-trader-sdk==0.8.4
 
 # Logging
 loguru>=0.7,<0.8

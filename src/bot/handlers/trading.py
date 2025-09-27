@@ -1,5 +1,7 @@
+from typing import Dict, Any, Optional
 from telegram import Update
 from telegram.ext import ContextTypes, ConversationHandler, MessageHandler, filters
+
 from src.database.operations import db
 from src.blockchain.wallet_manager import wallet_manager
 from src.blockchain.avantis_client import avantis_client
@@ -7,9 +9,17 @@ from src.bot.keyboards.trading_keyboards import (
     get_trading_keyboard, get_crypto_assets_keyboard, get_forex_assets_keyboard,
     get_leverage_keyboard, get_main_menu_keyboard
 )
-import logging
+from src.bot.middleware.user_middleware import UserMiddleware
+from src.bot.middleware.rate_limiter import rate_limiter
+from src.bot.constants import (
+    DEFAULT_LEVERAGE, DEFAULT_QUICK_TRADE_SIZE, 
+    INSUFFICIENT_BALANCE_MESSAGE, TRADE_SUCCESS_MESSAGE
+)
+from src.utils.validators import validate_trade_size, validate_leverage
+from src.utils.logging import get_logger
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
+user_middleware = UserMiddleware()
 
 # Conversation states
 ASSET_SELECTION, SIZE_INPUT, CONFIRM_TRADE = range(3)
@@ -17,7 +27,8 @@ ASSET_SELECTION, SIZE_INPUT, CONFIRM_TRADE = range(3)
 # Trading session data
 trading_sessions = {}
 
-async def trade_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
+@rate_limiter.rate_limit(requests=5, per=60)
+async def trade_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Handle trade command/callback"""
     if update.callback_query:
         await update.callback_query.edit_message_text(
@@ -163,7 +174,7 @@ async def confirm_trade_handler(update: Update, context: ContextTypes.DEFAULT_TY
         
     return ConversationHandler.END
 
-async def execute_trade(update: Update, user_id: int):
+async def execute_trade(update: Update, user_id: int) -> None:
     """Execute the actual trade"""
     try:
         session = trading_sessions[user_id]
@@ -177,9 +188,11 @@ async def execute_trade(update: Update, user_id: int):
         # Check wallet balance
         wallet_info = wallet_manager.get_wallet_info(db_user.wallet_address)
         if wallet_info['usdc_balance'] < session['size']:
-            await update.message.reply_text(
-                f"❌ Insufficient USDC balance. Need ${session['size']}, have ${wallet_info['usdc_balance']:.2f}"
+            error_msg = INSUFFICIENT_BALANCE_MESSAGE.format(
+                required=session['size'],
+                available=wallet_info['usdc_balance']
             )
+            await update.message.reply_text(error_msg)
             return
         
         # Decrypt private key
@@ -205,19 +218,13 @@ async def execute_trade(update: Update, user_id: int):
             leverage=session['leverage']
         )
         
-        success_text = f"""
-✅ **Trade Executed Successfully!**
-
-Transaction Hash: `{tx_hash}`
-
-Position Details:
-• Asset: {session['asset']}
-• Direction: {session['direction']}
-• Size: ${session['size']:,.2f} USDC
-• Leverage: {session['leverage']}x
-
-View your positions with /positions
-        """
+        success_text = TRADE_SUCCESS_MESSAGE.format(
+            tx_hash=tx_hash,
+            asset=session['asset'],
+            direction=session['direction'],
+            size=session['size'],
+            leverage=session['leverage']
+        )
         
         await update.message.reply_text(
             success_text,

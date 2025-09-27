@@ -2,18 +2,59 @@ version: '3.8'
 
 services:
   vanta-bot:
-    build: .
+    build: 
+      context: .
+      target: production
     container_name: vanta-bot
     restart: unless-stopped
     environment:
+      # Database
       - DATABASE_URL=postgresql://vanta_user:vanta_password@postgres:5432/vanta_bot
       - REDIS_URL=redis://redis:6379/0
+      
+      # Telegram
       - TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN}
+      
+      # Blockchain
       - BASE_RPC_URL=${BASE_RPC_URL:-https://mainnet.base.org}
+      - BASE_CHAIN_ID=${BASE_CHAIN_ID:-8453}
       - AVANTIS_TRADING_CONTRACT=${AVANTIS_TRADING_CONTRACT}
       - AVANTIS_VAULT_CONTRACT=${AVANTIS_VAULT_CONTRACT}
+      - USDC_CONTRACT=${USDC_CONTRACT:-0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913}
+      
+      # Security
       - ENCRYPTION_KEY=${ENCRYPTION_KEY}
-      - LOG_LEVEL=INFO
+      
+      # Avantis SDK
+      - TRADER_PRIVATE_KEY=${TRADER_PRIVATE_KEY}
+      - PYTH_WS_URL=${PYTH_WS_URL:-wss://hermes.pyth.network/ws}
+      
+      # Copy Trading
+      - COPY_EXECUTION_MODE=${COPY_EXECUTION_MODE:-DRY}
+      - DEFAULT_SLIPPAGE_PCT=${DEFAULT_SLIPPAGE_PCT:-1.0}
+      
+      # Indexer
+      - INDEXER_BACKFILL_RANGE=${INDEXER_BACKFILL_RANGE:-50000}
+      - INDEXER_PAGE=${INDEXER_PAGE:-2000}
+      - INDEXER_SLEEP_WS=${INDEXER_SLEEP_WS:-2}
+      - INDEXER_SLEEP_HTTP=${INDEXER_SLEEP_HTTP:-5}
+      
+      # Leaderboard
+      - LEADER_MIN_TRADES_30D=${LEADER_MIN_TRADES_30D:-300}
+      - LEADER_MIN_VOLUME_30D_USD=${LEADER_MIN_VOLUME_30D_USD:-10000000}
+      - LEADER_ACTIVE_HOURS=${LEADER_ACTIVE_HOURS:-72}
+      
+      # Admin
+      - ADMIN_USER_IDS=${ADMIN_USER_IDS}
+      
+      # Logging
+      - LOG_LEVEL=${LOG_LEVEL:-INFO}
+      - LOG_JSON=${LOG_JSON:-false}
+      - ENVIRONMENT=${ENVIRONMENT:-production}
+      
+      # Emergency Controls
+      - EMERGENCY_STOP=${EMERGENCY_STOP:-false}
+      
     volumes:
       - ./logs:/app/logs
       - ./data:/app/data
@@ -23,13 +64,15 @@ services:
       postgres:
         condition: service_healthy
       redis:
-        condition: service_started
+        condition: service_healthy
     healthcheck:
-      test: ["CMD", "python", "-c", "import requests; requests.get('http://localhost:8080/health')"]
+      test: ["CMD", "curl", "-f", "http://localhost:8080/healthz"]
       interval: 30s
       timeout: 10s
       retries: 3
       start_period: 40s
+    networks:
+      - vanta-network
 
   postgres:
     image: postgres:15-alpine
@@ -39,9 +82,10 @@ services:
       POSTGRES_DB: vanta_bot
       POSTGRES_USER: vanta_user
       POSTGRES_PASSWORD: vanta_password
+      POSTGRES_INITDB_ARGS: "--encoding=UTF-8 --lc-collate=C --lc-ctype=C"
     volumes:
       - postgres_data:/var/lib/postgresql/data
-      - ./config/init.sql:/docker-entrypoint-initdb.d/init.sql
+      - ./config/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
     ports:
       - "5432:5432"
     healthcheck:
@@ -49,12 +93,35 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
+      start_period: 30s
+    networks:
+      - vanta-network
+    command: >
+      postgres
+      -c shared_preload_libraries=pg_stat_statements
+      -c pg_stat_statements.track=all
+      -c max_connections=200
+      -c shared_buffers=256MB
+      -c effective_cache_size=1GB
+      -c maintenance_work_mem=64MB
+      -c checkpoint_completion_target=0.9
+      -c wal_buffers=16MB
+      -c default_statistics_target=100
 
   redis:
     image: redis:7-alpine
     container_name: vanta-redis
     restart: unless-stopped
-    command: redis-server --appendonly yes --maxmemory 256mb --maxmemory-policy allkeys-lru
+    command: >
+      redis-server
+      --appendonly yes
+      --maxmemory 512mb
+      --maxmemory-policy allkeys-lru
+      --save 900 1
+      --save 300 10
+      --save 60 10000
+      --tcp-keepalive 60
+      --timeout 300
     volumes:
       - redis_data:/data
     ports:
@@ -64,7 +131,57 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
+      start_period: 30s
+    networks:
+      - vanta-network
+
+  # Optional: Redis Commander for Redis management
+  redis-commander:
+    image: rediscommander/redis-commander:latest
+    container_name: vanta-redis-commander
+    restart: unless-stopped
+    environment:
+      - REDIS_HOSTS=local:redis:6379
+    ports:
+      - "8081:8081"
+    depends_on:
+      - redis
+    networks:
+      - vanta-network
+    profiles:
+      - tools
+
+  # Optional: pgAdmin for PostgreSQL management
+  pgadmin:
+    image: dpage/pgadmin4:latest
+    container_name: vanta-pgadmin
+    restart: unless-stopped
+    environment:
+      PGADMIN_DEFAULT_EMAIL: admin@vanta-bot.com
+      PGADMIN_DEFAULT_PASSWORD: admin
+      PGADMIN_CONFIG_SERVER_MODE: 'False'
+    volumes:
+      - pgadmin_data:/var/lib/pgadmin
+    ports:
+      - "8082:80"
+    depends_on:
+      - postgres
+    networks:
+      - vanta-network
+    profiles:
+      - tools
+
+networks:
+  vanta-network:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.20.0.0/16
 
 volumes:
   postgres_data:
+    driver: local
   redis_data:
+    driver: local
+  pgadmin_data:
+    driver: local

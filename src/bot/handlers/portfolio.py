@@ -1,27 +1,23 @@
+from typing import Dict, Any
 from telegram import Update
 from telegram.ext import ContextTypes
+
 from src.database.operations import db
-from src.services.analytics import Analytics
+from src.services.analytics import AnalyticsService
 from src.bot.keyboards.trading_keyboards import get_main_menu_keyboard
-import logging
+from src.bot.middleware.user_middleware import UserMiddleware
+from src.bot.constants import USER_NOT_FOUND_MESSAGE
+from src.utils.logging import get_logger
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
+analytics = AnalyticsService()
+user_middleware = UserMiddleware()
 
-analytics = Analytics()
-
-async def portfolio_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
+@user_middleware.require_user
+async def portfolio_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Handle portfolio command/callback"""
-    user_id = update.effective_user.id
+    db_user = context.user_data['db_user']
     
-    # Get user from database  
-    db_user = db.get_user(user_id)
-    if not db_user:
-        if update.callback_query:
-            await update.callback_query.answer("❌ User not found")
-        else:
-            await update.message.reply_text("❌ User not found. Please /start first.")
-        return
-        
     try:
         # Get user statistics
         stats = analytics.get_user_stats(db_user.id)

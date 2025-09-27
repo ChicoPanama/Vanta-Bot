@@ -22,6 +22,12 @@ AVANTIS_TRADING_CONTRACT = os.getenv("AVANTIS_TRADING_CONTRACT")  # 0x...
 AVANTIS_VAULT_CONTRACT = os.getenv("AVANTIS_VAULT_CONTRACT")      # 0x...
 USDC_CONTRACT = os.getenv("USDC_CONTRACT")                        # present in env.example
 
+# === OPERATIONAL TOGGLES ===
+INDEXER_BACKFILL_RANGE = int(os.getenv("INDEXER_BACKFILL_RANGE", "50000"))
+INDEXER_PAGE = int(os.getenv("INDEXER_PAGE", "2000"))
+INDEXER_SLEEP_WS = int(os.getenv("INDEXER_SLEEP_WS", "2"))
+INDEXER_SLEEP_HTTP = int(os.getenv("INDEXER_SLEEP_HTTP", "5"))
+
 ABI_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(__file__)))), "config", "abis")
 TRADING_ABI_PATH = os.path.join(ABI_DIR, "Trading.json")
 VAULT_ABI_PATH = os.path.join(ABI_DIR, "Vault.json")
@@ -137,8 +143,8 @@ class AvantisIndexer:
                 continue
                 
             event_cls = getattr(self.trading.events, name)
-            # Paginate by 2k blocks for safety
-            step = 2000
+            # Paginate by configurable page size for safety
+            step = INDEXER_PAGE
             
             for start in range(from_block, to_block + 1, step):
                 end = min(start + step - 1, to_block)
@@ -158,20 +164,36 @@ class AvantisIndexer:
     async def tail_follow(self, start_block: Optional[int] = None) -> None:
         """
         Subscribe new blocks (WS if available; else poll HTTP) and process Trading events forward.
+        Enhanced with gap detection and observability.
         """
-        logger.info("Tail follow starting (ws={})", bool(self.w3_ws))
+        logger.info("Tail follow starting (ws={}, sleep_ws={}s, sleep_http={}s)", 
+                   bool(self.w3_ws), INDEXER_SLEEP_WS, INDEXER_SLEEP_HTTP)
         current = start_block or self.w3_http.eth.block_number
+        last_log_time = time.time()
         
         while True:
             try:
                 latest = (self.w3_http.eth.block_number
                           if not self.w3_ws else self.w3_ws.eth.block_number)
-                          
+                
+                # Gap detection
+                gap = latest - current
+                if gap > 2 * INDEXER_PAGE:
+                    logger.warning("Indexer falling behind: {} blocks behind (latest={}, current={})", 
+                                 gap, latest, current)
+                
                 if latest > current:
-                    await self.backfill(current + 1, latest)
+                    events_processed = await self.backfill(current + 1, latest)
                     current = latest
                     
-                await asyncio.sleep(2 if self.w3_ws else 5)
+                    # Log progress every 60 seconds
+                    now = time.time()
+                    if now - last_log_time > 60:
+                        logger.info("Tail follow progress: block={}, events_this_batch={}", 
+                                   current, events_processed)
+                        last_log_time = now
+                    
+                await asyncio.sleep(INDEXER_SLEEP_WS if self.w3_ws else INDEXER_SLEEP_HTTP)
             except Exception as e:
                 logger.exception("tail_follow loop error: {}", e)
                 await asyncio.sleep(5)
@@ -180,7 +202,7 @@ class AvantisIndexer:
     async def _consume_event(self, name: str, log: LogReceipt) -> None:
         """
         Decode an event into our normalized DTOs and forward to persistence callbacks.
-        The exact field names depend on Trading.json; fill mapping once ABI is in place.
+        Field mappings based on ABI inspection of Trading.json.
         """
         try:
             data = dict(log["args"]) if "args" in log and isinstance(log["args"], dict) else {}
@@ -200,7 +222,12 @@ class AvantisIndexer:
             side = name_upper
 
         # Extract fields based on actual ABI structure from Trading.json
-        address = str(data.get("trader", ""))
+        # TradeOpened: ['trader', 'pair', 'isLong', 'size', 'price', 'fee']
+        # TradeClosed: ['trader', 'pair', 'size', 'price', 'pnl']
+        # LimitExecuted: ['trader', 'pair', 'size', 'price']
+        # Liquidation: ['trader', 'pair', 'size', 'price', 'loss']
+        
+        address = str(data.get("trader", "")).lower()
         pair = str(data.get("pair", ""))
         
         # Handle is_long field (only present in TradeOpened)
@@ -216,14 +243,12 @@ class AvantisIndexer:
         ts = await self._block_timestamp(block_number)
 
         # Calculate notional USD value
-        notional = Decimal(abs(price * size))
+        notional = abs(price * size)
         block_hash = log.get("blockHash", b"").hex() if log.get("blockHash") else None
 
         # Persist to database if session factory is available
         if self._session_factory:
             try:
-                # Import here to avoid circular imports
-                from src.database.models.trading import Fill
                 from sqlalchemy import text
                 
                 with self._session_factory() as session:  # type: Session
@@ -239,22 +264,33 @@ class AvantisIndexer:
                     ).fetchone()
                     
                     if not existing:
-                        fill_record = Fill(
-                            address=address.lower(),
-                            pair=pair,
-                            is_long=is_long,
-                            size=str(size),
-                            price=str(price),
-                            notional_usd=str(notional),
-                            fee=str(fee),
-                            side=side,
-                            maker_taker=None,  # Not available in current ABI
-                            block_number=block_number,
-                            block_hash=block_hash,
-                            tx_hash=tx_hash,
-                            ts=ts
+                        # Insert new fill record using raw SQL
+                        session.execute(
+                            text("""
+                                INSERT INTO fills (
+                                    address, pair, is_long, size, price, notional_usd, fee, side, 
+                                    maker_taker, block_number, block_hash, tx_hash, ts
+                                ) VALUES (
+                                    :address, :pair, :is_long, :size, :price, :notional_usd, :fee, :side,
+                                    :maker_taker, :block_number, :block_hash, :tx_hash, :ts
+                                )
+                            """),
+                            {
+                                "address": address.lower(),
+                                "pair": pair,
+                                "is_long": is_long,
+                                "size": size,
+                                "price": price,
+                                "notional_usd": notional,
+                                "fee": fee,
+                                "side": side,
+                                "maker_taker": None,  # Not available in current ABI
+                                "block_number": block_number,
+                                "block_hash": block_hash,
+                                "tx_hash": tx_hash,
+                                "ts": ts
+                            }
                         )
-                        session.add(fill_record)
                         session.commit()
                         logger.debug(f"Persisted fill: {address[:8]}... {pair} {side}")
                     else:

@@ -5,7 +5,9 @@ import os
 import aioredis
 from sqlalchemy import text
 from sqlalchemy.engine import Engine
+from decimal import Decimal
 from loguru import logger
+from .pnl_service import PnlService
 
 ACTIVE_HOURS = int(os.getenv("LEADER_ACTIVE_HOURS", "72"))
 MIN_TRADES = int(os.getenv("LEADER_MIN_TRADES_30D", "300"))
@@ -16,6 +18,7 @@ class LeaderboardService:
     def __init__(self, engine: Engine):
         self.engine = engine
         self.redis: Optional[aioredis.Redis] = None
+        self.pnl = PnlService(engine)
 
     async def _get_redis(self):
         """Get Redis connection, create if needed"""
@@ -62,7 +65,7 @@ class LeaderboardService:
         thirty_days_ago = int(time.time()) - (30 * 24 * 60 * 60)
         active_hours_ago = int(time.time()) - (ACTIVE_HOURS * 60 * 60)
 
-        sql = text(f"""
+        sql = text("""
             WITH window_fills AS (
                 SELECT 
                     address,
@@ -77,7 +80,7 @@ class LeaderboardService:
                     address,
                     COUNT(*) as trade_count_30d,
                     SUM(notional_usd) as last_30d_volume_usd,
-                    PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY notional_usd) as median_trade_size_usd,
+                    AVG(notional_usd) as median_trade_size_usd,
                     MAX(ts) as last_trade_at
                 FROM window_fills
                 GROUP BY address
@@ -117,14 +120,17 @@ class LeaderboardService:
         # Enhance with additional metrics
         enhanced_traders = []
         for row in rows:
+            addr = row["address"]
+            clean_pnl = self.pnl.clean_realized_pnl_30d(addr)
+            
             trader = {
-                "address": row["address"],
+                "address": addr,
                 "trade_count_30d": row["trade_count_30d"],
                 "last_30d_volume_usd": float(row["last_30d_volume_usd"]),
                 "median_trade_size_usd": float(row["median_trade_size_usd"]),
                 "last_trade_at": row["last_trade_at"],
-                "clean_realized_pnl_usd": None,  # TODO: Add FIFO PnL calculation
-                "copyability_score": self._calculate_copyability_score(row),
+                "clean_realized_pnl_usd": str(clean_pnl),
+                "copyability_score": self._calculate_copyability_score(row, clean_pnl),
                 "archetype": self._determine_archetype(row),
                 "risk_level": self._assess_risk_level(row)
             }
@@ -133,17 +139,22 @@ class LeaderboardService:
         logger.info(f"Computed leaderboard with {len(enhanced_traders)} qualified traders")
         return enhanced_traders
 
-    def _calculate_copyability_score(self, trader_data: Dict[str, Any]) -> int:
+    def _calculate_copyability_score(self, trader_data: Dict[str, Any], clean_pnl: Decimal) -> int:
         """Calculate copyability score (0-100) based on trading metrics"""
         volume_score = min(100, (trader_data["last_30d_volume_usd"] / MIN_VOL) * 50)
         activity_score = min(50, (trader_data["trade_count_30d"] / MIN_TRADES) * 50)
+        
+        # PnL bonus: normalize PnL contribution (30 points max)
+        vol = Decimal(str(trader_data["last_30d_volume_usd"]))
+        med = Decimal(str(trader_data["median_trade_size_usd"]))
+        pnl_score = int(min(30, max(0, (clean_pnl / Decimal("100000")) * 30)))
         
         # Penalty for very large trades (might be whale activity)
         median_penalty = 0
         if trader_data["median_trade_size_usd"] > 100000:  # $100k+
             median_penalty = 10
         
-        score = int(volume_score + activity_score - median_penalty)
+        score = int(volume_score + activity_score + pnl_score - median_penalty)
         return max(0, min(100, score))
 
     def _determine_archetype(self, trader_data: Dict[str, Any]) -> str:

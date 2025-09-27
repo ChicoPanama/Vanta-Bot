@@ -10,8 +10,8 @@ from alembic import context
 sys.path.append(os.path.dirname(os.path.dirname(__file__)))
 
 # Import your models
-from src.database.models.trading import Base
-from src.config.settings import config
+from src.database.models import Base
+from src.config.settings import settings
 
 # this is the Alembic Config object, which provides
 # access to the values within the .ini file in use.
@@ -33,7 +33,7 @@ target_metadata = Base.metadata
 
 def get_url():
     """Get database URL from environment or config"""
-    return config.DATABASE_URL if hasattr(config, 'DATABASE_URL') and config.DATABASE_URL else "sqlite:///vanta_bot.db"
+    return settings.DATABASE_URL if hasattr(settings, 'DATABASE_URL') and settings.DATABASE_URL else "sqlite:///vanta_bot.db"
 
 def run_migrations_offline() -> None:
     """Run migrations in 'offline' mode.

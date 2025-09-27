@@ -1,24 +1,21 @@
+from typing import List, Optional
 from telegram import Update
 from telegram.ext import ContextTypes
+
 from src.database.operations import db
 from src.bot.keyboards.trading_keyboards import get_main_menu_keyboard
-import logging
+from src.bot.middleware.user_middleware import UserMiddleware
+from src.bot.constants import USER_NOT_FOUND_MESSAGE, NO_ORDERS_MESSAGE
+from src.utils.logging import get_logger
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
+user_middleware = UserMiddleware()
 
-async def orders_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
+@user_middleware.require_user
+async def orders_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Handle orders command/callback"""
-    user_id = update.effective_user.id
+    db_user = context.user_data['db_user']
     
-    # Get user from database  
-    db_user = db.get_user(user_id)
-    if not db_user:
-        if update.callback_query:
-            await update.callback_query.answer("❌ User not found")
-        else:
-            await update.message.reply_text("❌ User not found. Please /start first.")
-        return
-        
     try:
         # Get user's pending orders
         session = db.get_session()
@@ -29,13 +26,7 @@ async def orders_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         session.close()
         
         if not orders:
-            no_orders_text = """
-📋 **Your Orders**
-
-No pending orders found.
-
-Create orders through the trading interface!
-            """
+            no_orders_text = NO_ORDERS_MESSAGE
             
             if update.callback_query:
                 await update.callback_query.edit_message_text(
