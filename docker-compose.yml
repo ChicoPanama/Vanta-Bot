@@ -1,27 +1,70 @@
 version: '3.8'
 
 services:
-  bot:
+  vanta-bot:
     build: .
-    env_file: production.env
-    depends_on:
-      - postgres
-      - redis
+    container_name: vanta-bot
     restart: unless-stopped
+    environment:
+      - DATABASE_URL=postgresql://vanta_user:vanta_password@postgres:5432/vanta_bot
+      - REDIS_URL=redis://redis:6379/0
+      - TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN}
+      - BASE_RPC_URL=${BASE_RPC_URL:-https://mainnet.base.org}
+      - AVANTIS_TRADING_CONTRACT=${AVANTIS_TRADING_CONTRACT}
+      - AVANTIS_VAULT_CONTRACT=${AVANTIS_VAULT_CONTRACT}
+      - ENCRYPTION_KEY=${ENCRYPTION_KEY}
+      - LOG_LEVEL=INFO
+    volumes:
+      - ./logs:/app/logs
+      - ./data:/app/data
+    ports:
+      - "8080:8080"  # Health check endpoint
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_started
+    healthcheck:
+      test: ["CMD", "python", "-c", "import requests; requests.get('http://localhost:8080/health')"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
 
   postgres:
-    image: postgres:15
+    image: postgres:15-alpine
+    container_name: vanta-postgres
+    restart: unless-stopped
     environment:
       POSTGRES_DB: vanta_bot
-      POSTGRES_USER: bot_user
-      POSTGRES_PASSWORD: your_secure_password
+      POSTGRES_USER: vanta_user
+      POSTGRES_PASSWORD: vanta_password
     volumes:
       - postgres_data:/var/lib/postgresql/data
-    restart: unless-stopped
+      - ./config/init.sql:/docker-entrypoint-initdb.d/init.sql
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U vanta_user -d vanta_bot"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
 
   redis:
     image: redis:7-alpine
+    container_name: vanta-redis
     restart: unless-stopped
+    command: redis-server --appendonly yes --maxmemory 256mb --maxmemory-policy allkeys-lru
+    volumes:
+      - redis_data:/data
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
 
 volumes:
   postgres_data:
+  redis_data:

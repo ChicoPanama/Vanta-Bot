@@ -1,2 +1,2 @@
-# AI module for Vanta Bot
-# Contains trader analysis, market intelligence, and ML models
+# AI package for Vanta Bot
+# Handles trader analysis, market intelligence, and ML models

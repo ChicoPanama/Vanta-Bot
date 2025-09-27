@@ -1,428 +1,387 @@
 """
-Test Leaderboard Service
-Tests the leaderboard service and trader rankings
+Tests for Leaderboard Service functionality
 """
 
 import pytest
 import asyncio
 from datetime import datetime, timedelta
-from unittest.mock import AsyncMock, MagicMock
-from src.copy_trading.leaderboard_service import LeaderboardService
+from unittest.mock import AsyncMock, MagicMock, patch
 
-class TestLeaderboardService:
-    @pytest.mark.asyncio
-    async def test_get_top_traders(self):
-        """Test getting top traders"""
-        service = LeaderboardService(None, None, None, None)
-        
-        # Mock database operations
-        service.db_pool = AsyncMock()
-        conn = AsyncMock()
-        service.db_pool.acquire.return_value.__aenter__.return_value = conn
-        
-        # Mock query results
-        conn.fetch.return_value = [
-            {
-                'address': '0x123',
-                'last_30d_volume_usd': 1000000,
-                'realized_pnl_clean_usd': 50000,
-                'trade_count_30d': 100,
-                'last_trade_at': datetime.utcnow(),
-                'maker_ratio': 0.3,
-                'unique_symbols': 5,
-                'win_rate': 0.65,
-                'archetype': 'Risk Manager',
-                'risk_level': 'MED',
-                'sharpe_like': 1.2,
-                'consistency': 0.8
-            }
-        ]
-        
-        # Mock Redis cache
-        service.redis = AsyncMock()
-        service.redis.get.return_value = None  # No cache
-        service.redis.setex.return_value = None
-        
-        # Mock AI analysis
-        service._get_ai_analysis = AsyncMock(return_value={
-            'archetype': 'Risk Manager',
-            'risk_level': 'MED',
-            'sharpe_like': 1.2,
-            'consistency': 0.8
-        })
-        
-        traders = await service.get_top_traders(limit=10)
-        
-        assert len(traders) == 1
-        assert traders[0]['address'] == '0x123'
-        assert 'ranking_score' in traders[0]
-        assert 'copyability_score' in traders[0]
-    
-    @pytest.mark.asyncio
-    async def test_ranking_algorithm(self):
-        """Test trader ranking algorithm"""
-        traders = [
-            {
-                'address': '0x1',
-                'last_30d_volume_usd': 1000000,
-                'realized_pnl_clean_usd': 50000,
-                'consistency': 0.8,
-                'last_trade_at': datetime.utcnow() - timedelta(hours=1)
-            },
-            {
-                'address': '0x2',
-                'last_30d_volume_usd': 500000,
-                'realized_pnl_clean_usd': 100000,
-                'consistency': 0.9,
-                'last_trade_at': datetime.utcnow() - timedelta(hours=12)
-            }
-        ]
-        
-        service = LeaderboardService(None, None, None, None)
-        ranked = await service._rank_traders(traders)
-        
-        # Verify ranking scores are calculated
-        assert all('ranking_score' in trader for trader in ranked)
-        
-        # Higher scores should be first
-        assert ranked[0]['ranking_score'] >= ranked[1]['ranking_score']
-    
-    def test_copyability_score_calculation(self):
-        """Test copyability score calculation"""
-        trader = {
+from src.copy_trading.leaderboard_service import LeaderboardService
+from src.analytics.position_tracker import TraderStats
+
+@pytest.fixture
+def mock_db_pool():
+    """Mock database pool"""
+    pool = AsyncMock()
+    conn = AsyncMock()
+    pool.acquire.return_value.__aenter__.return_value = conn
+    return pool, conn
+
+@pytest.fixture
+def mock_redis():
+    """Mock Redis client"""
+    return AsyncMock()
+
+@pytest.fixture
+def mock_trader_analyzer():
+    """Mock trader analyzer"""
+    return AsyncMock()
+
+@pytest.fixture
+def mock_config():
+    """Mock configuration"""
+    config = MagicMock()
+    config.LEADER_ACTIVE_HOURS = 72
+    config.LEADER_MIN_TRADES_30D = 300
+    config.LEADER_MIN_VOLUME_30D_USD = 10000000
+    return config
+
+@pytest.fixture
+def leaderboard_service(mock_db_pool, mock_redis, mock_trader_analyzer, mock_config):
+    """Create LeaderboardService instance with mocks"""
+    db_pool, _ = mock_db_pool
+    return LeaderboardService(
+        db_pool=db_pool,
+        redis_client=mock_redis,
+        trader_analyzer=mock_trader_analyzer,
+        config=mock_config
+    )
+
+@pytest.mark.asyncio
+async def test_leaderboard_service_initialization(leaderboard_service):
+    """Test LeaderboardService initialization"""
+    assert leaderboard_service is not None
+    assert leaderboard_service.cache_ttl == 300
+
+@pytest.mark.asyncio
+async def test_get_top_traders_cached(leaderboard_service, mock_redis):
+    """Test getting top traders from cache"""
+    # Mock cached data
+    cached_data = [
+        {
+            'address': '0xabc123',
             'last_30d_volume_usd': 1000000,
-            'consistency': 0.8,
-            'risk_level': 'MED',
-            'win_rate': 0.65,
-            'archetype': 'Risk Manager'
-        }
-        
-        service = LeaderboardService(None, None, None, None)
-        score = service._calculate_copyability_score(trader)
-        
-        assert 0 <= score <= 100
-        assert isinstance(score, int)
-    
-    def test_recency_score_calculation(self):
-        """Test recency score calculation"""
-        service = LeaderboardService(None, None, None, None)
-        
-        # Recent trade
-        recent_time = datetime.utcnow() - timedelta(hours=1)
-        score = service._calculate_recency_score(recent_time)
-        assert score == 1.0
-        
-        # Old trade
-        old_time = datetime.utcnow() - timedelta(days=30)
-        score = service._calculate_recency_score(old_time)
-        assert score == 0.2
-        
-        # No trade
-        score = service._calculate_recency_score(None)
-        assert score == 0.0
-    
-    @pytest.mark.asyncio
-    async def test_get_trader_card(self):
-        """Test getting trader card"""
-        service = LeaderboardService(None, None, None, None)
-        
-        # Mock database operations
-        service.db_pool = AsyncMock()
-        conn = AsyncMock()
-        service.db_pool.acquire.return_value.__aenter__.return_value = conn
-        
-        # Mock trader stats
-        conn.fetchrow.return_value = {
-            'address': '0x123',
-            'last_30d_volume_usd': 1000000,
-            'median_trade_size_usd': 10000,
-            'trade_count_30d': 100,
             'realized_pnl_clean_usd': 50000,
+            'trade_count_30d': 500,
+            'copyability_score': 85
+        }
+    ]
+    
+    mock_redis.get.return_value = '{"address": "0xabc123", "last_30d_volume_usd": 1000000}'
+    
+    traders = await leaderboard_service.get_top_traders(limit=10)
+    
+    # Should return cached data
+    mock_redis.get.assert_called_once()
+    assert isinstance(traders, list)
+
+@pytest.mark.asyncio
+async def test_get_top_traders_no_cache(leaderboard_service, mock_db_pool, mock_redis):
+    """Test getting top traders from database when no cache"""
+    db_pool, conn = mock_db_pool
+    
+    # Mock no cache
+    mock_redis.get.return_value = None
+    
+    # Mock database response
+    mock_rows = [
+        {
+            'address': '0xabc123',
+            'last_30d_volume_usd': 1000000,
+            'realized_pnl_clean_usd': 50000,
+            'trade_count_30d': 500,
+            'archetype': 'Conservative Scalper',
+            'risk_level': 'MED',
+            'sharpe_like': 1.5,
+            'consistency': 0.8,
             'last_trade_at': datetime.utcnow(),
             'maker_ratio': 0.3,
-            'unique_symbols': 5,
-            'win_rate': 0.65
+            'unique_symbols': 5
         }
-        
-        # Mock AI analysis
-        service._get_ai_analysis = AsyncMock(return_value={
-            'archetype': 'Risk Manager',
-            'risk_level': 'MED',
-            'sharpe_like': 1.2,
-            'consistency': 0.8
-        })
-        
-        # Mock recent trades
-        service._get_recent_trades = AsyncMock(return_value=[
-            {
-                'pair_symbol': 'BTC-USD',
-                'is_long': True,
-                'size': 1.0,
-                'price': 50000,
-                'leverage': 10,
-                'event_type': 'OPENED',
-                'timestamp': datetime.utcnow(),
-                'tx_hash': '0xabc'
-            }
-        ])
-        
-        card = await service.get_trader_card('0x123')
-        
-        assert card is not None
-        assert card['address'] == '0x123'
-        assert 'copyability_score' in card
-        assert 'strengths' in card
-        assert 'warnings' in card
-        assert 'optimal_copy_size' in card
+    ]
     
-    @pytest.mark.asyncio
-    async def test_get_trader_rankings(self):
-        """Test getting trader rankings"""
-        service = LeaderboardService(None, None, None, None)
-        
-        # Mock database operations
-        service.db_pool = AsyncMock()
-        conn = AsyncMock()
-        service.db_pool.acquire.return_value.__aenter__.return_value = conn
-        
-        # Mock query results
-        conn.fetch.return_value = [
-            {
-                'address': '0x123',
-                'last_30d_volume_usd': 1000000,
-                'realized_pnl_clean_usd': 50000,
-                'trade_count_30d': 100,
-                'last_trade_at': datetime.utcnow(),
-                'maker_ratio': 0.3,
-                'unique_symbols': 5,
-                'win_rate': 0.65
-            },
-            {
-                'address': '0x456',
-                'last_30d_volume_usd': 500000,
-                'realized_pnl_clean_usd': 100000,
-                'trade_count_30d': 50,
-                'last_trade_at': datetime.utcnow() - timedelta(hours=1),
-                'maker_ratio': 0.5,
-                'unique_symbols': 3,
-                'win_rate': 0.7
-            }
-        ]
-        
-        rankings = await service.get_trader_rankings('0x123')
-        
-        assert rankings is not None
-        assert 'overall_rank' in rankings
-        assert 'total_traders' in rankings
-        assert 'ranking_score' in rankings
-        assert 'percentile' in rankings
+    conn.fetch.return_value = mock_rows
+    mock_redis.setex.return_value = None
     
-    @pytest.mark.asyncio
-    async def test_get_leaderboard_stats(self):
-        """Test getting leaderboard statistics"""
-        service = LeaderboardService(None, None, None, None)
-        
-        # Mock database operations
-        service.db_pool = AsyncMock()
-        conn = AsyncMock()
-        service.db_pool.acquire.return_value.__aenter__.return_value = conn
-        
-        # Mock query results
-        conn.fetch.return_value = [
-            {
-                'address': '0x123',
-                'last_30d_volume_usd': 1000000,
-                'realized_pnl_clean_usd': 50000,
-                'trade_count_30d': 100,
-                'win_rate': 0.65,
-                'consistency': 0.8,
-                'archetype': 'Risk Manager'
-            },
-            {
-                'address': '0x456',
-                'last_30d_volume_usd': 500000,
-                'realized_pnl_clean_usd': 100000,
-                'trade_count_30d': 50,
-                'win_rate': 0.7,
-                'consistency': 0.9,
-                'archetype': 'Conservative Scalper'
-            }
-        ]
-        
-        stats = await service.get_leaderboard_stats()
-        
-        assert 'total_traders' in stats
-        assert 'total_volume' in stats
-        assert 'total_pnl' in stats
-        assert 'avg_win_rate' in stats
-        assert 'top_archetype' in stats
-        assert stats['total_traders'] == 2
-        assert stats['total_volume'] == 1500000
-        assert stats['total_pnl'] == 150000
+    traders = await leaderboard_service.get_top_traders(limit=10)
     
-    @pytest.mark.asyncio
-    async def test_search_traders(self):
-        """Test searching traders"""
-        service = LeaderboardService(None, None, None, None)
-        
-        # Mock database operations
-        service.db_pool = AsyncMock()
-        conn = AsyncMock()
-        service.db_pool.acquire.return_value.__aenter__.return_value = conn
-        
-        # Mock query results
-        conn.fetch.return_value = [
-            {
-                'address': '0x1234567890123456789012345678901234567890',
-                'last_30d_volume_usd': 1000000,
-                'realized_pnl_clean_usd': 50000,
-                'trade_count_30d': 100,
-                'last_trade_at': datetime.utcnow(),
-                'maker_ratio': 0.3,
-                'unique_symbols': 5,
-                'win_rate': 0.65,
-                'archetype': 'Risk Manager',
-                'risk_level': 'MED'
-            }
-        ]
-        
-        traders = await service.search_traders('0x123', limit=10)
-        
-        assert len(traders) == 1
-        assert traders[0]['address'].startswith('0x123')
+    # Should fetch from database and cache result
+    conn.fetch.assert_called_once()
+    mock_redis.setex.assert_called_once()
+
+@pytest.mark.asyncio
+async def test_calculate_volume_score(leaderboard_service):
+    """Test volume score calculation"""
+    # Test various volume levels
+    assert leaderboard_service._calculate_volume_score(0) == 0.0
+    assert leaderboard_service._calculate_volume_score(1000) > 0.0
+    assert leaderboard_service._calculate_volume_score(1000000) > leaderboard_service._calculate_volume_score(100000)
+    assert leaderboard_service._calculate_volume_score(10000000) <= 1.0
+
+@pytest.mark.asyncio
+async def test_calculate_pnl_score(leaderboard_service):
+    """Test PnL score calculation"""
+    # Test positive ROI
+    assert leaderboard_service._calculate_pnl_score(50000, 1000000) > 0.5  # 5% ROI
+    assert leaderboard_service._calculate_pnl_score(100000, 1000000) > 0.5  # 10% ROI
     
-    @pytest.mark.asyncio
-    async def test_get_trending_traders(self):
-        """Test getting trending traders"""
-        service = LeaderboardService(None, None, None, None)
-        
-        # Mock database operations
-        service.db_pool = AsyncMock()
-        conn = AsyncMock()
-        service.db_pool.acquire.return_value.__aenter__.return_value = conn
-        
-        # Mock query results
-        conn.fetch.return_value = [
-            {
-                'address': '0x123',
-                'last_30d_volume_usd': 1000000,
-                'realized_pnl_clean_usd': 50000,
-                'trade_count_30d': 100,
-                'last_trade_at': datetime.utcnow(),
-                'maker_ratio': 0.3,
-                'unique_symbols': 5,
-                'win_rate': 0.65,
-                'archetype': 'Risk Manager',
-                'risk_level': 'MED',
-                'recent_trades': 5
-            }
-        ]
-        
-        traders = await service.get_trending_traders(hours=24, limit=5)
-        
-        assert len(traders) == 1
-        assert traders[0]['address'] == '0x123'
-        assert traders[0]['recent_trades'] == 5
+    # Test negative ROI
+    assert leaderboard_service._calculate_pnl_score(-50000, 1000000) < 0.5  # -5% ROI
     
-    @pytest.mark.asyncio
-    async def test_get_top_performers_by_archetype(self):
-        """Test getting top performers by archetype"""
-        service = LeaderboardService(None, None, None, None)
-        
-        # Mock database operations
-        service.db_pool = AsyncMock()
-        conn = AsyncMock()
-        service.db_pool.acquire.return_value.__aenter__.return_value = conn
-        
-        # Mock query results
-        conn.fetch.return_value = [
-            {
-                'address': '0x123',
-                'last_30d_volume_usd': 1000000,
-                'realized_pnl_clean_usd': 50000,
-                'trade_count_30d': 100,
-                'last_trade_at': datetime.utcnow(),
-                'maker_ratio': 0.3,
-                'unique_symbols': 5,
-                'win_rate': 0.65,
-                'archetype': 'Risk Manager',
-                'risk_level': 'MED',
-                'rank': 1
-            },
-            {
-                'address': '0x456',
-                'last_30d_volume_usd': 500000,
-                'realized_pnl_clean_usd': 100000,
-                'trade_count_30d': 50,
-                'last_trade_at': datetime.utcnow(),
-                'maker_ratio': 0.5,
-                'unique_symbols': 3,
-                'win_rate': 0.7,
-                'archetype': 'Conservative Scalper',
-                'risk_level': 'LOW',
-                'rank': 1
-            }
-        ]
-        
-        performers = await service.get_top_performers_by_archetype(limit=5)
-        
-        assert 'Risk Manager' in performers
-        assert 'Conservative Scalper' in performers
-        assert len(performers['Risk Manager']) == 1
-        assert len(performers['Conservative Scalper']) == 1
+    # Test zero volume
+    assert leaderboard_service._calculate_pnl_score(1000, 0) == 0.5
+
+@pytest.mark.asyncio
+async def test_calculate_consistency_score_with_ai_data(leaderboard_service):
+    """Test consistency score calculation with AI data"""
+    trader = {
+        'consistency': 0.8,
+        'trade_count_30d': 500,
+        'unique_symbols': 5
+    }
     
-    @pytest.mark.asyncio
-    async def test_cache_operations(self):
-        """Test cache operations"""
-        service = LeaderboardService(None, None, None, None)
-        
-        # Mock Redis operations
-        service.redis = AsyncMock()
-        service.redis.get.return_value = None  # No cache
-        service.redis.setex.return_value = None
-        
-        # Mock database operations
-        service.db_pool = AsyncMock()
-        conn = AsyncMock()
-        service.db_pool.acquire.return_value.__aenter__.return_value = conn
-        
-        # Mock query results
-        conn.fetch.return_value = []
-        
-        # Test cache miss
-        traders = await service.get_top_traders(limit=10)
-        
-        # Verify cache operations
-        service.redis.get.assert_called_once()
-        service.redis.setex.assert_called_once()
-        
-        # Test cache hit
-        service.redis.get.return_value = '{"test": "data"}'
-        service.redis.get.side_effect = ['{"test": "data"}', None]  # First call returns cache, second returns None
-        
-        traders = await service.get_top_traders(limit=10)
-        
-        # Should not call database on cache hit
-        assert conn.fetch.call_count == 1  # Only called once for the first test
+    score = leaderboard_service._calculate_consistency_score(trader)
     
-    @pytest.mark.asyncio
-    async def test_error_handling(self):
-        """Test error handling"""
-        service = LeaderboardService(None, None, None, None)
+    assert score == 0.8  # Should use AI consistency directly
+
+@pytest.mark.asyncio
+async def test_calculate_consistency_score_fallback(leaderboard_service):
+    """Test consistency score calculation fallback"""
+    trader = {
+        'trade_count_30d': 500,
+        'unique_symbols': 5
+    }
+    
+    score = leaderboard_service._calculate_consistency_score(trader)
+    
+    assert 0.0 <= score <= 1.0
+
+@pytest.mark.asyncio
+async def test_calculate_recency_score(leaderboard_service):
+    """Test recency score calculation"""
+    now = datetime.utcnow()
+    
+    # Recent trade (1 hour ago)
+    recent = now - timedelta(hours=1)
+    assert leaderboard_service._calculate_recency_score(recent) == 1.0
+    
+    # Older trade (1 day ago)
+    day_old = now - timedelta(days=1)
+    assert leaderboard_service._calculate_recency_score(day_old) == 0.8
+    
+    # Very old trade (1 week ago)
+    week_old = now - timedelta(weeks=1)
+    assert leaderboard_service._calculate_recency_score(week_old) == 0.2
+    
+    # No trade
+    assert leaderboard_service._calculate_recency_score(None) == 0.0
+
+@pytest.mark.asyncio
+async def test_calculate_copyability_score(leaderboard_service):
+    """Test copyability score calculation"""
+    trader = {
+        'last_30d_volume_usd': 1000000,
+        'consistency_score': 0.8,
+        'risk_level': 'MED',
+        'pnl_score': 0.7,
+        'archetype': 'Conservative Scalper',
+        'recency_score': 0.9
+    }
+    
+    score = leaderboard_service._calculate_copyability_score(trader)
+    
+    assert 0 <= score <= 100
+    assert score > 50  # Should be above average for good trader
+
+@pytest.mark.asyncio
+async def test_get_trader_card_success(leaderboard_service, mock_db_pool, mock_redis):
+    """Test getting trader card successfully"""
+    db_pool, conn = mock_db_pool
+    
+    address = '0xabc123'
+    
+    # Mock trader stats
+    mock_stats = {
+        'address': address,
+        'last_30d_volume_usd': 1000000,
+        'realized_pnl_clean_usd': 50000,
+        'trade_count_30d': 500,
+        'unique_symbols': 5
+    }
+    
+    conn.fetchrow.return_value = mock_stats
+    conn.fetch.return_value = []  # No recent trades
+    mock_redis.get.return_value = None  # No cached AI analysis
+    
+    card = await leaderboard_service.get_trader_card(address)
+    
+    assert card is not None
+    assert card['address'] == address
+    assert 'copyability_score' in card
+    assert 'strengths' in card
+    assert 'warnings' in card
+
+@pytest.mark.asyncio
+async def test_get_trader_card_not_found(leaderboard_service, mock_db_pool):
+    """Test getting trader card when trader not found"""
+    db_pool, conn = mock_db_pool
+    
+    address = '0xnonexistent'
+    conn.fetchrow.return_value = None
+    
+    card = await leaderboard_service.get_trader_card(address)
+    
+    assert card is None
+
+@pytest.mark.asyncio
+async def test_identify_strengths(leaderboard_service):
+    """Test identifying trader strengths"""
+    stats = {
+        'last_30d_volume_usd': 2000000,  # High volume
+        'realized_pnl_clean_usd': 100000,  # Positive PnL
+        'trade_count_30d': 800,  # High activity
+        'unique_symbols': 8  # Good diversification
+    }
+    
+    ai_analysis = {
+        'archetype': 'Conservative Scalper',
+        'consistency': 0.9
+    }
+    
+    strengths = leaderboard_service._identify_strengths(stats, ai_analysis)
+    
+    assert len(strengths) <= 3
+    assert any('volume' in strength.lower() for strength in strengths)
+    assert any('PnL' in strength for strength in strengths)
+
+@pytest.mark.asyncio
+async def test_identify_warnings(leaderboard_service):
+    """Test identifying trader warnings"""
+    stats = {
+        'realized_pnl_clean_usd': -20000,  # Losses
+        'last_30d_volume_usd': 50000,  # Low volume
+        'trade_count_30d': 20  # Low activity
+    }
+    
+    ai_analysis = {
+        'risk_level': 'HIGH',
+        'max_drawdown': 0.25
+    }
+    
+    warnings = leaderboard_service._identify_warnings(stats, ai_analysis)
+    
+    assert len(warnings) <= 2
+    assert any('loss' in warning.lower() for warning in warnings)
+
+@pytest.mark.asyncio
+async def test_suggest_copy_size(leaderboard_service):
+    """Test suggesting copy size"""
+    stats = {
+        'last_30d_volume_usd': 5000000  # High volume
+    }
+    
+    ai_analysis = {
+        'risk_level': 'LOW',
+        'optimal_copy_ratio': 0.15
+    }
+    
+    size = leaderboard_service._suggest_copy_size(stats, ai_analysis)
+    
+    assert 10.0 <= size <= 1000.0  # Within reasonable bounds
+
+@pytest.mark.asyncio
+async def test_get_leaderboard_by_category_volume(leaderboard_service):
+    """Test getting leaderboard by volume category"""
+    # Mock top traders
+    mock_traders = [
+        {'address': '0xabc123', 'last_30d_volume_usd': 1000000},
+        {'address': '0xdef456', 'last_30d_volume_usd': 2000000},
+        {'address': '0xghi789', 'last_30d_volume_usd': 500000}
+    ]
+    
+    with patch.object(leaderboard_service, 'get_top_traders', return_value=mock_traders):
+        traders = await leaderboard_service.get_leaderboard_by_category('volume', limit=3)
         
-        # Mock database error
-        service.db_pool = AsyncMock()
-        service.db_pool.acquire.side_effect = Exception("Database error")
+        assert len(traders) == 3
+        assert traders[0]['last_30d_volume_usd'] == 2000000  # Highest volume first
+
+@pytest.mark.asyncio
+async def test_get_leaderboard_by_category_pnl(leaderboard_service):
+    """Test getting leaderboard by PnL category"""
+    # Mock top traders
+    mock_traders = [
+        {'address': '0xabc123', 'realized_pnl_clean_usd': 50000},
+        {'address': '0xdef456', 'realized_pnl_clean_usd': 100000},
+        {'address': '0xghi789', 'realized_pnl_clean_usd': 25000}
+    ]
+    
+    with patch.object(leaderboard_service, 'get_top_traders', return_value=mock_traders):
+        traders = await leaderboard_service.get_leaderboard_by_category('pnl', limit=3)
         
-        # Test that errors are handled gracefully
-        traders = await service.get_top_traders(limit=10)
-        assert traders == []
-        
-        card = await service.get_trader_card('0x123')
-        assert card is None
-        
-        rankings = await service.get_trader_rankings('0x123')
-        assert rankings is None
-        
-        stats = await service.get_leaderboard_stats()
-        assert stats['total_traders'] == 0
+        assert len(traders) == 3
+        assert traders[0]['realized_pnl_clean_usd'] == 100000  # Highest PnL first
+
+@pytest.mark.asyncio
+async def test_search_traders(leaderboard_service, mock_db_pool):
+    """Test searching traders by address"""
+    db_pool, conn = mock_db_pool
+    
+    query = '0xabc123'
+    
+    # Mock database response
+    mock_rows = [
+        {
+            'address': '0xabc123def456',
+            'last_30d_volume_usd': 1000000,
+            'realized_pnl_clean_usd': 50000,
+            'trade_count_30d': 500,
+            'unique_symbols': 5
+        }
+    ]
+    
+    conn.fetch.return_value = mock_rows
+    mock_redis.get.return_value = None  # No cached AI analysis
+    
+    traders = await leaderboard_service.search_traders(query, limit=10)
+    
+    assert len(traders) == 1
+    assert traders[0]['address'] == '0xabc123def456'
+    assert 'copyability_score' in traders[0]
+
+@pytest.mark.asyncio
+async def test_search_traders_invalid_query(leaderboard_service):
+    """Test searching with invalid query"""
+    query = 'invalid'
+    
+    traders = await leaderboard_service.search_traders(query, limit=10)
+    
+    assert traders == []
+
+@pytest.mark.asyncio
+async def test_get_trader_analytics_summary(leaderboard_service, mock_db_pool):
+    """Test getting trader analytics summary"""
+    db_pool, conn = mock_db_pool
+    
+    # Mock database responses
+    conn.fetchval.side_effect = [100, 50]  # total_traders, active_traders
+    
+    conn.fetchrow.return_value = {
+        'avg_volume': 500000,
+        'max_volume': 5000000,
+        'min_volume': 10000
+    }
+    
+    conn.fetch.return_value = [
+        {'archetype': 'Conservative Scalper', 'count': 30},
+        {'archetype': 'Risk Manager', 'count': 25},
+        {'archetype': 'Volume Hunter', 'count': 20}
+    ]
+    
+    summary = await leaderboard_service.get_trader_analytics_summary()
+    
+    assert summary['total_traders'] == 100
+    assert summary['active_traders'] == 50
+    assert 'volume_stats' in summary
+    assert 'archetype_distribution' in summary
+    assert len(summary['archetype_distribution']) == 3

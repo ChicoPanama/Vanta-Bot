@@ -13,6 +13,7 @@ A professional Telegram trading bot for the Avantis Protocol on Base network, fe
 
 ## ✨ Features
 
+### Core Trading
 - **📊 80+ Trading Markets**: Crypto, Forex, Commodities, Indices
 - **⚡ High Leverage**: Up to 500x leverage on supported assets
 - **💰 Zero Fees**: Pay fees only on profitable trades
@@ -21,6 +22,15 @@ A professional Telegram trading bot for the Avantis Protocol on Base network, fe
 - **🔄 Real-Time**: Live price updates and position monitoring
 - **📈 Analytics**: Portfolio tracking and performance metrics
 - **🔒 Self-Custody**: Users maintain full control of their funds
+
+### 🤖 AI-Powered Copy Trading (NEW!)
+- **🎯 Smart Copy Trading**: Automatically copy trades from successful Avantis traders
+- **🧠 AI Trader Analysis**: ML-powered trader classification and performance prediction
+- **📊 Market Intelligence**: Real-time regime detection and copy timing signals
+- **🏆 Leaderboard Rankings**: AI-ranked trader leaderboards with detailed analytics
+- **🛡️ Risk-Aware Copying**: Advanced risk management with slippage protection
+- **📈 FIFO PnL Calculation**: Accurate performance measurement using proper lot matching
+- **⚡ Real-Time Monitoring**: Base chain event indexing and position tracking
 
 ## 🏗️ Architecture
 
@@ -41,6 +51,21 @@ A professional Telegram trading bot for the Avantis Protocol on Base network, fe
 │  - Session Data  │    │  - Forex Data   │    │  - Alerts      │
 └─────────────────┘    └─────────────────┘    └─────────────────┘
 ```
+
+## 🤖 Copy Trading Commands
+
+### Getting Started
+- `/copytrader` - Create and manage your copytrader profiles
+- `/alfa` - View AI-powered trader leaderboard
+- `/status` - Check your copy trading performance
+- `/alpha` - Get AI insights and market intelligence
+- `/insights` - Quick market overview
+
+### Key Features
+- **AI Analysis**: Every trader gets analyzed using machine learning models
+- **Risk Scoring**: 0-100 copyability scores based on performance and risk
+- **Market Regimes**: Green/Yellow/Red signals for optimal copy timing
+- **Safety First**: Built-in slippage protection and leverage limits
 
 ## 🚀 Quick Start
 

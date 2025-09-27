@@ -1,17 +1,18 @@
 """
 Leaderboard Service for Vanta Bot
-Manages trader rankings and copyability scores
+Ranks traders based on performance and AI analysis
 """
 
 import asyncio
 import json
 import logging
 from datetime import datetime, timedelta
-from typing import Dict, List, Optional, Any
+from typing import List, Dict, Optional, Any
 from dataclasses import dataclass
-import numpy as np
+
 import asyncpg
 import redis.asyncio as redis
+import numpy as np
 
 from ..analytics.position_tracker import TraderStats
 from ..ai.trader_analyzer import TraderAnalyzer
@@ -20,24 +21,19 @@ logger = logging.getLogger(__name__)
 
 @dataclass
 class TraderRanking:
-    """Trader ranking data structure"""
     address: str
     ranking_score: float
-    volume_rank: int
-    pnl_rank: int
     copyability_score: int
+    volume_score: float
+    pnl_score: float
+    consistency_score: float
+    recency_score: float
     archetype: str
     risk_level: str
-    last_30d_volume_usd: float
-    realized_pnl_clean_usd: float
-    trade_count_30d: int
-    win_rate: float
-    sharpe_like: float
-    consistency: float
-    last_trade_at: datetime
+    ai_analysis: Optional[Dict]
 
 class LeaderboardService:
-    """Service for managing trader leaderboards and rankings"""
+    """Service for ranking and managing trader leaderboards"""
     
     def __init__(self, db_pool: asyncpg.Pool, redis_client: redis.Redis, 
                  trader_analyzer: TraderAnalyzer, config):
@@ -45,6 +41,9 @@ class LeaderboardService:
         self.redis = redis_client
         self.analyzer = trader_analyzer
         self.config = config
+        
+        # Cache settings
+        self.cache_ttl = 300  # 5 minutes
         
     async def get_top_traders(self, limit: int = 50, window: str = '30d') -> List[Dict]:
         """Get ranked list of top traders with AI scoring"""
@@ -69,8 +68,9 @@ class LeaderboardService:
             top_traders = enriched_traders[:limit]
             
             # Cache for 5 minutes
-            await self.redis.setex(cache_key, 300, json.dumps(top_traders, default=str))
+            await self.redis.setex(cache_key, self.cache_ttl, json.dumps(top_traders, default=str))
             
+            logger.info(f"Generated leaderboard with {len(top_traders)} traders")
             return top_traders
             
         except Exception as e:
@@ -81,26 +81,13 @@ class LeaderboardService:
         """Fetch traders that meet quality criteria"""
         try:
             query = """
-                SELECT 
-                    ts.address,
-                    ts.last_30d_volume_usd,
-                    ts.median_trade_size_usd,
-                    ts.trade_count_30d,
-                    ts.realized_pnl_clean_usd,
-                    ts.last_trade_at,
-                    ts.maker_ratio,
-                    ts.unique_symbols,
-                    ts.win_rate,
-                    ta.archetype,
-                    ta.risk_level,
-                    ta.sharpe_like,
-                    ta.consistency
+                SELECT ts.*, ta.archetype, ta.risk_level, ta.sharpe_like, ta.consistency
                 FROM trader_stats ts
                 LEFT JOIN trader_analytics ta ON ts.address = ta.address AND ts.window = ta.window
                 WHERE ts.window = $1
                   AND ts.last_trade_at > NOW() - INTERVAL '%s hours'
-                  AND ts.trade_count_30d >= $2
-                  AND ts.last_30d_volume_usd >= $3
+                  AND ts.trade_count_30d >= $3
+                  AND ts.last_30d_volume_usd >= $4
                   AND (ts.maker_ratio IS NULL OR ts.maker_ratio <= 0.95)
                   AND ts.unique_symbols >= 3
                 ORDER BY ts.last_30d_volume_usd DESC
@@ -123,43 +110,107 @@ class LeaderboardService:
     async def _rank_traders(self, traders: List[Dict]) -> List[Dict]:
         """Apply multi-factor ranking algorithm"""
         try:
+            if not traders:
+                return []
+            
             for trader in traders:
-                # Primary ranking factors
-                volume_score = np.log1p(trader['last_30d_volume_usd']) / 20  # Normalize
-                pnl_score = max(0, trader['realized_pnl_clean_usd']) / max(trader['last_30d_volume_usd'], 1)
-                consistency_score = trader.get('consistency', 0.5) or 0.5
+                # Calculate individual scores
+                volume_score = self._calculate_volume_score(trader['last_30d_volume_usd'])
+                pnl_score = self._calculate_pnl_score(trader['realized_pnl_clean_usd'], trader['last_30d_volume_usd'])
+                consistency_score = self._calculate_consistency_score(trader)
                 recency_score = self._calculate_recency_score(trader['last_trade_at'])
                 
-                # Composite score
+                # Composite ranking score
                 trader['ranking_score'] = (
                     volume_score * 0.4 +
                     pnl_score * 0.3 +
                     consistency_score * 0.2 +
                     recency_score * 0.1
                 )
+                
+                # Store individual scores for analysis
+                trader['volume_score'] = volume_score
+                trader['pnl_score'] = pnl_score
+                trader['consistency_score'] = consistency_score
+                trader['recency_score'] = recency_score
             
             # Sort by composite score
-            return sorted(traders, key=lambda x: x['ranking_score'], reverse=True)
+            ranked_traders = sorted(traders, key=lambda x: x['ranking_score'], reverse=True)
+            
+            return ranked_traders
             
         except Exception as e:
             logger.error(f"Error ranking traders: {e}")
             return traders
     
-    def _calculate_recency_score(self, last_trade_at: datetime) -> float:
-        """Calculate recency score based on last trade time"""
+    def _calculate_volume_score(self, volume: float) -> float:
+        """Calculate volume-based score (0-1)"""
+        if volume <= 0:
+            return 0.0
+        
+        # Log-normalized volume score
+        log_volume = np.log1p(volume)
+        max_log_volume = 20  # Approximate max for normalization
+        
+        return min(1.0, log_volume / max_log_volume)
+    
+    def _calculate_pnl_score(self, pnl: float, volume: float) -> float:
+        """Calculate PnL-based score (0-1)"""
+        if volume <= 0:
+            return 0.5  # Neutral score for no volume
+        
+        # ROI-based scoring
+        roi = pnl / volume
+        
+        # Normalize to 0-1 range
+        # Positive ROI gets higher scores, negative ROI gets lower scores
+        if roi >= 0:
+            # Positive ROI: 0.5 to 1.0
+            return 0.5 + min(0.5, roi * 10)  # Cap at 5% ROI for max score
+        else:
+            # Negative ROI: 0.0 to 0.5
+            return max(0.0, 0.5 + roi * 10)  # Cap at -5% ROI for min score
+    
+    def _calculate_consistency_score(self, trader: Dict) -> float:
+        """Calculate consistency-based score (0-1)"""
+        try:
+            # Use AI consistency if available
+            if trader.get('consistency') is not None:
+                return float(trader['consistency'])
+            
+            # Fallback: use trade count and unique symbols as proxy
+            trade_count = trader.get('trade_count_30d', 0)
+            unique_symbols = trader.get('unique_symbols', 0)
+            
+            if trade_count == 0:
+                return 0.0
+            
+            # Consistency based on diversification and activity
+            diversification_score = min(1.0, unique_symbols / 10)  # Up to 10 symbols
+            activity_score = min(1.0, trade_count / 1000)  # Up to 1000 trades
+            
+            return (diversification_score + activity_score) / 2
+            
+        except Exception as e:
+            logger.error(f"Error calculating consistency score: {e}")
+            return 0.5
+    
+    def _calculate_recency_score(self, last_trade_at: Optional[datetime]) -> float:
+        """Calculate recency-based score (0-1)"""
         if not last_trade_at:
             return 0.0
         
-        hours_since_last_trade = (datetime.utcnow() - last_trade_at).total_seconds() / 3600
+        # Score based on how recent the last trade was
+        hours_ago = (datetime.utcnow() - last_trade_at).total_seconds() / 3600
         
-        # Score decreases with time since last trade
-        if hours_since_last_trade <= 24:
+        # Score decreases with time
+        if hours_ago <= 1:
             return 1.0
-        elif hours_since_last_trade <= 72:
+        elif hours_ago <= 24:
             return 0.8
-        elif hours_since_last_trade <= 168:  # 1 week
+        elif hours_ago <= 72:
             return 0.6
-        elif hours_since_last_trade <= 336:  # 2 weeks
+        elif hours_ago <= 168:  # 1 week
             return 0.4
         else:
             return 0.2
@@ -198,25 +249,15 @@ class LeaderboardService:
             
             # Get from database
             async with self.db_pool.acquire() as conn:
-                query = """
-                    SELECT * FROM trader_analytics 
+                row = await conn.fetchrow("""
+                    SELECT archetype, risk_level, sharpe_like, max_drawdown, 
+                           consistency, win_prob_7d, expected_dd_7d, optimal_copy_ratio
+                    FROM trader_analytics
                     WHERE address = $1 AND window = '30d'
-                """
-                row = await conn.fetchrow(query, address)
+                """, address)
                 
                 if row:
-                    analysis = {
-                        'archetype': row['archetype'],
-                        'risk_level': row['risk_level'],
-                        'sharpe_like': float(row['sharpe_like']),
-                        'max_drawdown': float(row['max_drawdown']),
-                        'consistency': float(row['consistency']),
-                        'win_prob_7d': float(row['win_prob_7d']),
-                        'expected_dd_7d': float(row['expected_dd_7d']),
-                        'optimal_copy_ratio': float(row['optimal_copy_ratio']),
-                        'strengths': row['strengths'] or [],
-                        'warnings': row['warnings'] or []
-                    }
+                    analysis = dict(row)
                     
                     # Cache for 1 hour
                     await self.redis.setex(cache_key, 3600, json.dumps(analysis))
@@ -238,16 +279,14 @@ class LeaderboardService:
             volume_factor = min(20, np.log1p(trader['last_30d_volume_usd']) / 2)
             
             # Consistency factor
-            consistency = trader.get('consistency', 0.5) or 0.5
-            consistency_factor = consistency * 15
+            consistency_factor = trader.get('consistency_score', 0.5) * 15
             
             # Risk factor (medium risk preferred for copying)
             risk_level = trader.get('risk_level', 'MED')
             risk_factor = {'LOW': 5, 'MED': 15, 'HIGH': -10}.get(risk_level, 0)
             
-            # Win rate factor
-            win_rate = trader.get('win_rate', 0.5) or 0.5
-            win_rate_factor = (win_rate - 0.5) * 20
+            # PnL factor (positive PnL preferred)
+            pnl_factor = trader.get('pnl_score', 0.5) * 10
             
             # Archetype factor (some archetypes copy better)
             archetype = trader.get('archetype', 'Unknown')
@@ -259,17 +298,11 @@ class LeaderboardService:
                 'Aggressive Swinger': -5
             }.get(archetype, 0)
             
-            # Sharpe ratio factor
-            sharpe_like = trader.get('sharpe_like', 0) or 0
-            sharpe_factor = min(10, max(-10, sharpe_like * 5))
-            
-            # Trade count factor (more trades = more data)
-            trade_count = trader.get('trade_count_30d', 0)
-            trade_count_factor = min(10, trade_count / 100)
+            # Recency factor (more recent activity preferred)
+            recency_factor = trader.get('recency_score', 0.5) * 10
             
             total_score = (base_score + volume_factor + consistency_factor + 
-                          risk_factor + win_rate_factor + archetype_factor + 
-                          sharpe_factor + trade_count_factor)
+                          risk_factor + pnl_factor + archetype_factor + recency_factor)
             
             return max(0, min(100, int(total_score)))
             
@@ -294,11 +327,11 @@ class LeaderboardService:
             # Calculate additional metrics
             card_data = {
                 **stats,
-                **ai_analysis,
+                **(ai_analysis or {}),
                 'recent_trades': recent_trades,
-                'copyability_score': self._calculate_copyability_score({**stats, **ai_analysis}),
-                'strengths': ai_analysis.get('strengths', []) if ai_analysis else [],
-                'warnings': ai_analysis.get('warnings', []) if ai_analysis else [],
+                'copyability_score': self._calculate_copyability_score({**stats, **(ai_analysis or {})}),
+                'strengths': self._identify_strengths(stats, ai_analysis),
+                'warnings': self._identify_warnings(stats, ai_analysis),
                 'optimal_copy_size': self._suggest_copy_size(stats, ai_analysis)
             }
             
@@ -312,27 +345,13 @@ class LeaderboardService:
         """Get trader statistics"""
         try:
             async with self.db_pool.acquire() as conn:
-                query = """
-                    SELECT * FROM trader_stats 
+                row = await conn.fetchrow("""
+                    SELECT * FROM trader_stats
                     WHERE address = $1 AND window = '30d'
-                """
-                row = await conn.fetchrow(query, address)
+                """, address)
                 
-                if row:
-                    return {
-                        'address': row['address'],
-                        'last_30d_volume_usd': float(row['last_30d_volume_usd']),
-                        'median_trade_size_usd': float(row['median_trade_size_usd']),
-                        'trade_count_30d': row['trade_count_30d'],
-                        'realized_pnl_clean_usd': float(row['realized_pnl_clean_usd']),
-                        'last_trade_at': row['last_trade_at'],
-                        'maker_ratio': float(row['maker_ratio']) if row['maker_ratio'] else None,
-                        'unique_symbols': row['unique_symbols'],
-                        'win_rate': float(row['win_rate'])
-                    }
-            
-            return None
-            
+                return dict(row) if row else None
+                
         except Exception as e:
             logger.error(f"Error getting trader stats for {address}: {e}")
             return None
@@ -341,226 +360,238 @@ class LeaderboardService:
         """Get recent trades for a trader"""
         try:
             async with self.db_pool.acquire() as conn:
-                query = """
-                    SELECT * FROM trade_events 
-                    WHERE address = $1 
-                    ORDER BY timestamp DESC 
+                rows = await conn.fetch("""
+                    SELECT pair, is_long, size, price, leverage, timestamp, event_type
+                    FROM trade_events
+                    WHERE address = $1
+                    ORDER BY timestamp DESC
                     LIMIT $2
-                """
-                rows = await conn.fetch(query, address, limit)
+                """, address, limit)
                 
-                return [
-                    {
-                        'pair_symbol': row['pair_symbol'],
-                        'is_long': row['is_long'],
-                        'size': float(row['size']),
-                        'price': float(row['price']),
-                        'leverage': float(row['leverage']),
-                        'event_type': row['event_type'],
-                        'timestamp': row['timestamp'],
-                        'tx_hash': row['tx_hash']
-                    }
-                    for row in rows
-                ]
+                return [dict(row) for row in rows]
                 
         except Exception as e:
             logger.error(f"Error getting recent trades for {address}: {e}")
             return []
     
-    def _suggest_copy_size(self, stats: Dict, ai_analysis: Optional[Dict]) -> float:
-        """Suggest optimal copy size for a trader"""
+    def _identify_strengths(self, stats: Dict, ai_analysis: Optional[Dict]) -> List[str]:
+        """Identify trader strengths"""
+        strengths = []
+        
         try:
-            if not ai_analysis:
-                return 100.0  # Default suggestion
+            # Volume strength
+            if stats.get('last_30d_volume_usd', 0) > 1000000:  # $1M+
+                strengths.append("High trading volume")
             
-            # Base suggestion on optimal copy ratio
-            optimal_ratio = ai_analysis.get('optimal_copy_ratio', 0.1)
+            # PnL strength
+            if stats.get('realized_pnl_clean_usd', 0) > 0:
+                strengths.append("Positive PnL track record")
             
-            # Adjust based on trader volume
+            # Activity strength
+            if stats.get('trade_count_30d', 0) > 500:
+                strengths.append("High trading activity")
+            
+            # Diversification strength
+            if stats.get('unique_symbols', 0) > 5:
+                strengths.append("Well-diversified portfolio")
+            
+            # AI-based strengths
+            if ai_analysis:
+                archetype = ai_analysis.get('archetype', '')
+                if archetype == 'Conservative Scalper':
+                    strengths.append("Conservative risk management")
+                elif archetype == 'Risk Manager':
+                    strengths.append("Excellent risk control")
+                elif archetype == 'Precision Trader':
+                    strengths.append("Precise entry/exit timing")
+                
+                # Consistency strength
+                if ai_analysis.get('consistency', 0) > 0.7:
+                    strengths.append("Consistent performance")
+            
+            return strengths[:3]  # Return top 3
+            
+        except Exception as e:
+            logger.error(f"Error identifying strengths: {e}")
+            return ["Analysis pending"]
+    
+    def _identify_warnings(self, stats: Dict, ai_analysis: Optional[Dict]) -> List[str]:
+        """Identify potential warnings"""
+        warnings = []
+        
+        try:
+            # PnL warnings
+            if stats.get('realized_pnl_clean_usd', 0) < -10000:  # -$10k
+                warnings.append("Significant losses")
+            
+            # Volume warnings
+            if stats.get('last_30d_volume_usd', 0) < 100000:  # <$100k
+                warnings.append("Low trading volume")
+            
+            # Activity warnings
+            if stats.get('trade_count_30d', 0) < 50:
+                warnings.append("Limited trading activity")
+            
+            # AI-based warnings
+            if ai_analysis:
+                risk_level = ai_analysis.get('risk_level', '')
+                if risk_level == 'HIGH':
+                    warnings.append("High risk profile")
+                
+                max_drawdown = ai_analysis.get('max_drawdown', 0)
+                if max_drawdown > 0.2:  # 20%
+                    warnings.append("High historical drawdown")
+            
+            return warnings[:2]  # Return top 2
+            
+        except Exception as e:
+            logger.error(f"Error identifying warnings: {e}")
+            return []
+    
+    def _suggest_copy_size(self, stats: Dict, ai_analysis: Optional[Dict]) -> float:
+        """Suggest optimal copy size for this trader"""
+        try:
+            # Base suggestion
+            base_size = 100.0  # $100
+            
+            # Adjust based on volume
             volume = stats.get('last_30d_volume_usd', 0)
-            if volume > 1000000:  # > $1M volume
-                base_size = 1000
-            elif volume > 100000:  # > $100K volume
-                base_size = 500
-            else:
-                base_size = 100
+            if volume > 10000000:  # $10M+
+                base_size *= 2
+            elif volume > 1000000:  # $1M+
+                base_size *= 1.5
+            elif volume < 100000:  # <$100k
+                base_size *= 0.5
             
-            # Apply optimal ratio
-            suggested_size = base_size * optimal_ratio
+            # Adjust based on AI analysis
+            if ai_analysis:
+                risk_level = ai_analysis.get('risk_level', '')
+                if risk_level == 'LOW':
+                    base_size *= 1.2
+                elif risk_level == 'HIGH':
+                    base_size *= 0.8
+                
+                optimal_ratio = ai_analysis.get('optimal_copy_ratio', 0.1)
+                if optimal_ratio > 0:
+                    base_size *= optimal_ratio * 10  # Scale up the ratio
             
-            return max(50, min(5000, suggested_size))  # Clamp to reasonable range
+            # Cap at reasonable limits
+            return max(10.0, min(1000.0, base_size))
             
         except Exception as e:
             logger.error(f"Error suggesting copy size: {e}")
             return 100.0
     
-    async def get_trader_rankings(self, address: str) -> Optional[Dict]:
-        """Get ranking information for a specific trader"""
+    async def get_leaderboard_by_category(self, category: str, limit: int = 20) -> List[Dict]:
+        """Get leaderboard filtered by category"""
         try:
-            # Get all traders for ranking
-            all_traders = await self._fetch_filtered_traders('30d')
-            ranked_traders = await self._rank_traders(all_traders)
+            all_traders = await self.get_top_traders(limit=100)
             
-            # Find the trader
-            trader_rank = None
-            for i, trader in enumerate(ranked_traders):
-                if trader['address'] == address:
-                    trader_rank = {
-                        'overall_rank': i + 1,
-                        'total_traders': len(ranked_traders),
-                        'ranking_score': trader['ranking_score'],
-                        'percentile': (1 - (i + 1) / len(ranked_traders)) * 100
-                    }
-                    break
+            if category == 'volume':
+                # Sort by volume
+                return sorted(all_traders, key=lambda x: x.get('last_30d_volume_usd', 0), reverse=True)[:limit]
             
-            return trader_rank
+            elif category == 'pnl':
+                # Sort by PnL
+                return sorted(all_traders, key=lambda x: x.get('realized_pnl_clean_usd', 0), reverse=True)[:limit]
             
-        except Exception as e:
-            logger.error(f"Error getting trader rankings for {address}: {e}")
-            return None
-    
-    async def get_leaderboard_stats(self) -> Dict[str, Any]:
-        """Get overall leaderboard statistics"""
-        try:
-            # Get all traders
-            all_traders = await self._fetch_filtered_traders('30d')
+            elif category == 'consistency':
+                # Sort by consistency score
+                return sorted(all_traders, key=lambda x: x.get('consistency_score', 0), reverse=True)[:limit]
             
-            if not all_traders:
-                return {
-                    'total_traders': 0,
-                    'total_volume': 0,
-                    'total_pnl': 0,
-                    'avg_win_rate': 0,
-                    'top_archetype': 'Unknown'
-                }
+            elif category == 'copyability':
+                # Sort by copyability score
+                return sorted(all_traders, key=lambda x: x.get('copyability_score', 50), reverse=True)[:limit]
             
-            # Calculate statistics
-            total_volume = sum(t['last_30d_volume_usd'] for t in all_traders)
-            total_pnl = sum(t['realized_pnl_clean_usd'] for t in all_traders)
-            avg_win_rate = np.mean([t['win_rate'] for t in all_traders])
-            
-            # Most common archetype
-            archetypes = [t.get('archetype', 'Unknown') for t in all_traders if t.get('archetype')]
-            if archetypes:
-                from collections import Counter
-                archetype_counts = Counter(archetypes)
-                top_archetype = archetype_counts.most_common(1)[0][0]
             else:
-                top_archetype = 'Unknown'
-            
-            return {
-                'total_traders': len(all_traders),
-                'total_volume': total_volume,
-                'total_pnl': total_pnl,
-                'avg_win_rate': avg_win_rate,
-                'top_archetype': top_archetype,
-                'avg_trade_count': np.mean([t['trade_count_30d'] for t in all_traders]),
-                'avg_consistency': np.mean([t.get('consistency', 0.5) or 0.5 for t in all_traders])
-            }
-            
+                # Default: overall ranking
+                return all_traders[:limit]
+                
         except Exception as e:
-            logger.error(f"Error getting leaderboard stats: {e}")
-            return {
-                'total_traders': 0,
-                'total_volume': 0,
-                'total_pnl': 0,
-                'avg_win_rate': 0,
-                'top_archetype': 'Unknown'
-            }
+            logger.error(f"Error getting leaderboard by category {category}: {e}")
+            return []
     
-    async def search_traders(self, query: str, limit: int = 20) -> List[Dict]:
+    async def search_traders(self, query: str, limit: int = 10) -> List[Dict]:
         """Search traders by address or other criteria"""
         try:
-            # For now, we'll search by address prefix
-            # In the future, this could be expanded to search by archetype, etc.
+            # For now, simple address matching
+            # In production, this could be more sophisticated
             
+            if not query.startswith('0x') or len(query) < 10:
+                return []
+            
+            # Get trader stats for addresses that match
             async with self.db_pool.acquire() as conn:
-                search_query = """
-                    SELECT ts.*, ta.archetype, ta.risk_level
-                    FROM trader_stats ts
-                    LEFT JOIN trader_analytics ta ON ts.address = ta.address AND ts.window = ta.window
-                    WHERE ts.address ILIKE $1
-                      AND ts.trade_count_30d >= 20
-                    ORDER BY ts.last_30d_volume_usd DESC
+                rows = await conn.fetch("""
+                    SELECT * FROM trader_stats
+                    WHERE address ILIKE $1 AND window = '30d'
+                    ORDER BY last_30d_volume_usd DESC
                     LIMIT $2
-                """
+                """, f'%{query}%', limit)
+            
+            traders = []
+            for row in rows:
+                trader_data = dict(row)
                 
-                rows = await conn.fetch(search_query, f"{query}%", limit)
+                # Add AI analysis
+                ai_analysis = await self._get_ai_analysis(row['address'])
+                if ai_analysis:
+                    trader_data.update(ai_analysis)
                 
-                return [dict(row) for row in rows]
+                # Calculate copyability score
+                trader_data['copyability_score'] = self._calculate_copyability_score(trader_data)
                 
+                traders.append(trader_data)
+            
+            return traders
+            
         except Exception as e:
             logger.error(f"Error searching traders: {e}")
             return []
     
-    async def get_trending_traders(self, hours: int = 24, limit: int = 10) -> List[Dict]:
-        """Get trending traders (recently active with good performance)"""
+    async def get_trader_analytics_summary(self) -> Dict[str, Any]:
+        """Get summary analytics for all traders"""
         try:
+            # Get basic counts
             async with self.db_pool.acquire() as conn:
-                query = """
+                total_traders = await conn.fetchval("SELECT COUNT(*) FROM trader_stats WHERE window = '30d'")
+                active_traders = await conn.fetchval("""
+                    SELECT COUNT(*) FROM trader_stats 
+                    WHERE window = '30d' AND last_trade_at > NOW() - INTERVAL '24 hours'
+                """)
+                
+                # Get volume stats
+                volume_stats = await conn.fetchrow("""
                     SELECT 
-                        ts.*,
-                        ta.archetype,
-                        ta.risk_level,
-                        ta.copyability_score,
-                        COUNT(te.id) as recent_trades
-                    FROM trader_stats ts
-                    LEFT JOIN trader_analytics ta ON ts.address = ta.address AND ts.window = ta.window
-                    LEFT JOIN trade_events te ON ts.address = te.address 
-                        AND te.timestamp > NOW() - INTERVAL '%s hours'
-                    WHERE ts.last_trade_at > NOW() - INTERVAL '%s hours'
-                      AND ts.trade_count_30d >= 50
-                      AND ts.realized_pnl_clean_usd > 0
-                    GROUP BY ts.address, ta.archetype, ta.risk_level, ta.copyability_score
-                    ORDER BY recent_trades DESC, ts.realized_pnl_clean_usd DESC
-                    LIMIT $1
-                """ % (hours, hours)
+                        AVG(last_30d_volume_usd) as avg_volume,
+                        MAX(last_30d_volume_usd) as max_volume,
+                        MIN(last_30d_volume_usd) as min_volume
+                    FROM trader_stats WHERE window = '30d'
+                """)
                 
-                rows = await conn.fetch(query, limit)
-                
-                return [dict(row) for row in rows]
-                
+                # Get archetype distribution
+                archetype_dist = await conn.fetch("""
+                    SELECT archetype, COUNT(*) as count
+                    FROM trader_analytics
+                    WHERE window = '30d'
+                    GROUP BY archetype
+                    ORDER BY count DESC
+                """)
+            
+            return {
+                'total_traders': total_traders,
+                'active_traders': active_traders,
+                'volume_stats': dict(volume_stats) if volume_stats else {},
+                'archetype_distribution': [dict(row) for row in archetype_dist],
+                'last_updated': datetime.utcnow().isoformat()
+            }
+            
         except Exception as e:
-            logger.error(f"Error getting trending traders: {e}")
-            return []
-    
-    async def get_top_performers_by_archetype(self, limit: int = 5) -> Dict[str, List[Dict]]:
-        """Get top performers grouped by archetype"""
-        try:
-            async with self.db_pool.acquire() as conn:
-                query = """
-                    SELECT 
-                        ts.*,
-                        ta.archetype,
-                        ta.risk_level,
-                        ta.copyability_score,
-                        ROW_NUMBER() OVER (PARTITION BY ta.archetype ORDER BY ts.realized_pnl_clean_usd DESC) as rank
-                    FROM trader_stats ts
-                    LEFT JOIN trader_analytics ta ON ts.address = ta.address AND ts.window = ta.window
-                    WHERE ta.archetype IS NOT NULL
-                      AND ts.trade_count_30d >= 50
-                      AND ts.last_trade_at > NOW() - INTERVAL '7 days'
-                """
-                
-                rows = await conn.fetch(query)
-                
-                # Group by archetype
-                archetype_groups = {}
-                for row in rows:
-                    archetype = row['archetype']
-                    if archetype not in archetype_groups:
-                        archetype_groups[archetype] = []
-                    
-                    if row['rank'] <= limit:
-                        archetype_groups[archetype].append(dict(row))
-                
-                return archetype_groups
-                
-        except Exception as e:
-            logger.error(f"Error getting top performers by archetype: {e}")
-            return {}
-    
-    async def stop(self):
-        """Stop the leaderboard service"""
-        logger.info("Stopping leaderboard service...")
-        # Cleanup resources if needed
+            logger.error(f"Error getting trader analytics summary: {e}")
+            return {
+                'total_traders': 0,
+                'active_traders': 0,
+                'volume_stats': {},
+                'archetype_distribution': [],
+                'last_updated': datetime.utcnow().isoformat()
+            }

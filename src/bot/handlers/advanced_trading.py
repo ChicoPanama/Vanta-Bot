@@ -226,7 +226,7 @@ async def close_profitable_positions_handler(update: Update, context: ContextTyp
             except Exception as e:
                 logger.error(f"Error closing profitable position {position.id}: {e}")
         
-        await query.answer(f"✅ Closed {closed_count} profitable positions}")
+        await query.answer(f"✅ Closed {closed_count} profitable positions")
         
     except Exception as e:
         logger.error(f"Error in close_profitable_positions: {e}")

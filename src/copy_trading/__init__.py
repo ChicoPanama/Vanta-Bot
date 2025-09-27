@@ -1,2 +1,2 @@
-# Copy Trading module for Vanta Bot
-# Contains leaderboard service and copy execution engine
+# Copy Trading package for Vanta Bot
+# Handles copy trading execution, leaderboards, and user management

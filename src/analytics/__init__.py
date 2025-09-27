@@ -1,2 +1,2 @@
-# Analytics module for Vanta Bot
-# Contains data extraction, position tracking, and market intelligence
+# Analytics package for Vanta Bot
+# Handles trader data extraction, position tracking, and event monitoring
