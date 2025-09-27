@@ -3,7 +3,10 @@ Vanta Bot - Main Entry Point
 Professional Telegram trading bot for the Avantis Protocol on Base network
 """
 
+import asyncio
 import logging
+import os
+from sqlalchemy import create_engine
 from telegram.ext import Application, CommandHandler, CallbackQueryHandler, MessageHandler, filters, ConversationHandler
 
 from src.config.settings import config
@@ -12,7 +15,12 @@ from src.bot.handlers import (
     start, wallet, trading, positions, portfolio, orders, settings,
     user_types, advanced_trading
 )
+from src.bot.handlers.copy_trading_commands import (
+    copy_trading_handlers, alfa_refresh_callback, copy_status_callback
+)
 from src.bot.keyboards.trading_keyboards import get_quick_trade_keyboard
+from src.services.analytics.position_tracker import PositionTracker
+from src.services.indexers.avantis_indexer import AvantisIndexer
 
 # Configure logging
 logging.basicConfig(
@@ -39,6 +47,10 @@ def create_application() -> Application:
     app.add_handler(CommandHandler("portfolio", portfolio.portfolio_handler))
     app.add_handler(CommandHandler("orders", orders.orders_handler))
     app.add_handler(CommandHandler("settings", settings.settings_handler))
+    
+    # Add copy trading command handlers
+    for handler in copy_trading_handlers:
+        app.add_handler(handler)
     
     # Add conversation handler for trading
     trade_conversation = ConversationHandler(
@@ -143,6 +155,12 @@ async def route_callback(callback_data: str, update, context, user_type: str):
         await handle_risk_management(update, context, callback_data)
     elif callback_data in ["performance", "trade_history"]:
         await handle_analytics(update, context, callback_data)
+    
+    # Copy trading callbacks
+    elif callback_data == "alfa_refresh":
+        await alfa_refresh_callback(update, context)
+    elif callback_data == "copy_status":
+        await copy_status_callback(update, context)
 
 
 async def handle_quick_trade(update, context, callback_data: str):
@@ -214,9 +232,43 @@ async def handle_analytics(update, context, callback_data: str):
         await advanced_trading.trade_history_handler(update, context)
 
 
+async def start_background_services():
+    """Start background services like position tracker and indexer"""
+    try:
+        # Initialize position tracker if database URL is available
+        if hasattr(config, 'DATABASE_URL') and config.DATABASE_URL:
+            engine = create_engine(config.DATABASE_URL, pool_pre_ping=True)
+            tracker = PositionTracker(engine=engine)
+            
+            # Set tracker for handlers
+            from src.bot.handlers.copy_trading_commands import set_position_tracker
+            set_position_tracker(tracker)
+            
+            # Start position tracker as background task
+            asyncio.create_task(tracker.start())
+            logger.info("Position tracker started")
+        
+        # Initialize Avantis indexer if contracts are configured
+        if (hasattr(config, 'AVANTIS_TRADING_CONTRACT') and 
+            config.AVANTIS_TRADING_CONTRACT and 
+            hasattr(config, 'BASE_RPC_URL') and 
+            config.BASE_RPC_URL):
+            
+            indexer = AvantisIndexer()
+            
+            # Start indexer tailing as background task
+            asyncio.create_task(indexer.tail_follow())
+            logger.info("Avantis indexer started")
+            
+    except Exception as e:
+        logger.error(f"Error starting background services: {e}")
+
 def main():
     """Start the bot"""
     app = create_application()
+    
+    # Start background services
+    asyncio.create_task(start_background_services())
     
     logger.info("Starting Vanta Bot with Advanced Features...")
     app.run_polling()
