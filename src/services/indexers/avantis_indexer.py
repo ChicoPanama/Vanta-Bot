@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio, json, os, time
 from dataclasses import dataclass
 from typing import Optional, Iterable, Dict, Any, List, Tuple
+from decimal import Decimal
 
 from loguru import logger
 from tenacity import retry, stop_after_attempt, wait_exponential
@@ -11,6 +12,7 @@ from web3.providers.websocket import WebsocketProviderV2
 from web3.providers.rpc import HTTPProvider
 from web3.contract.contract import Contract
 from web3.types import LogReceipt
+from sqlalchemy.orm import Session
 
 # === ENV / CONFIG ===
 BASE_RPC_URL = os.getenv("BASE_RPC_URL")
@@ -73,6 +75,7 @@ class AvantisIndexer:
     - Uses WS provider for tailing (low-latency new blocks).
     - Decodes Trading/Vault events with local ABIs (put ABI JSON in config/abis).
     - Writes out normalized events via user-provided callbacks (inject later).
+    - Persists fills directly to database for real-time analytics.
     """
     def __init__(self) -> None:
         if not BASE_RPC_URL or not AVANTIS_TRADING_CONTRACT:
@@ -104,6 +107,9 @@ class AvantisIndexer:
                 abi=self.vault_abi,
             )
 
+        # Database session factory for persistence
+        self._session_factory = None
+        
         # Placeholders for persistence callbacks (wire to your DB layer)
         self.on_fill = None        # Callable[[TraderFill], Awaitable[None]]
         self.on_position = None    # Callable[[TraderPosition], Awaitable[None]]
@@ -184,16 +190,80 @@ class AvantisIndexer:
         block_number = log.get("blockNumber", 0) or 0
         tx_hash = log.get("transactionHash", b"").hex()
 
-        # *** TODO: Map ABI fields to our DTOs. Below shows guarded examples. ***
-        side = name.upper()
-        address = str(data.get("trader") or data.get("user") or data.get("account") or "")
-        pair = str(data.get("pair") or data.get("symbol") or data.get("asset") or "")
-        is_long = bool(data.get("isLong") or (data.get("direction") == 1))
-        size = float(data.get("size") or data.get("positionSize") or 0)
-        price = float(data.get("price") or data.get("entryPrice") or data.get("executionPrice") or 0)
-        fee = float(data.get("fee") or 0)
+        # Map event name to side based on ABI inspection
+        name_upper = name.upper()
+        if name_upper in ("TRADEOPENED", "LIMITEXECUTED"):
+            side = "OPEN"
+        elif name_upper in ("TRADECLOSED", "LIQUIDATION"):
+            side = "CLOSE"
+        else:
+            side = name_upper
+
+        # Extract fields based on actual ABI structure from Trading.json
+        address = str(data.get("trader", ""))
+        pair = str(data.get("pair", ""))
+        
+        # Handle is_long field (only present in TradeOpened)
+        is_long = data.get("isLong", False) if "isLong" in data else False
+        
+        size = float(data.get("size", 0))
+        price = float(data.get("price", 0))
+        fee = float(data.get("fee", 0))
+        
+        # Additional fields for specific events
+        pnl = float(data.get("pnl", 0)) if "pnl" in data else 0
+        loss = float(data.get("loss", 0)) if "loss" in data else 0
         ts = await self._block_timestamp(block_number)
 
+        # Calculate notional USD value
+        notional = Decimal(abs(price * size))
+        block_hash = log.get("blockHash", b"").hex() if log.get("blockHash") else None
+
+        # Persist to database if session factory is available
+        if self._session_factory:
+            try:
+                # Import here to avoid circular imports
+                from src.database.models.trading import Fill
+                from sqlalchemy import text
+                
+                with self._session_factory() as session:  # type: Session
+                    # Check for duplicate
+                    existing = session.execute(
+                        text("SELECT id FROM fills WHERE tx_hash = :tx_hash AND address = :address AND pair = :pair AND side = :side"),
+                        {
+                            "tx_hash": tx_hash,
+                            "address": address.lower(),
+                            "pair": pair,
+                            "side": side
+                        }
+                    ).fetchone()
+                    
+                    if not existing:
+                        fill_record = Fill(
+                            address=address.lower(),
+                            pair=pair,
+                            is_long=is_long,
+                            size=str(size),
+                            price=str(price),
+                            notional_usd=str(notional),
+                            fee=str(fee),
+                            side=side,
+                            maker_taker=None,  # Not available in current ABI
+                            block_number=block_number,
+                            block_hash=block_hash,
+                            tx_hash=tx_hash,
+                            ts=ts
+                        )
+                        session.add(fill_record)
+                        session.commit()
+                        logger.debug(f"Persisted fill: {address[:8]}... {pair} {side}")
+                    else:
+                        logger.debug(f"Duplicate fill skipped: {tx_hash}")
+                        
+            except Exception as e:
+                logger.error(f"Failed to persist fill: {e}")
+
+        # Create normalized fill for callbacks
         fill = TraderFill(
             address=address, pair=pair, is_long=is_long, size=size, price=price,
             fee=fee, side=side, block_number=block_number, tx_hash=tx_hash, ts=ts
@@ -202,8 +272,9 @@ class AvantisIndexer:
         if self.on_fill:
             await self.on_fill(fill)
 
-        # Optionally build/update TraderPosition here (requires lot accounting).
-        # Defer to position tracker if you prefer.
+        # Log event for debugging
+        logger.debug(f"Processed {name} event: {address[:8]}... {pair} {side} size={size} price={price}")
+
         return
 
     async def _block_timestamp(self, block_number: int) -> int:
@@ -220,3 +291,8 @@ class AvantisIndexer:
             self.on_fill = on_fill
         if on_position:
             self.on_position = on_position
+
+    def set_db_session_factory(self, session_factory):
+        """Set database session factory for persistence"""
+        self._session_factory = session_factory
+        logger.info("Database session factory set for persistence")

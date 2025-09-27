@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, Float, DateTime, Boolean, Text, JSON
+from sqlalchemy import Column, Integer, String, Float, DateTime, Boolean, Text, JSON, BigInteger, Numeric, Index
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.sql import func
 from datetime import datetime
@@ -66,3 +66,91 @@ class Transaction(Base):
     confirmed_at = Column(DateTime)
     gas_used = Column(Integer)
     gas_price = Column(Float)
+
+# Copy Trading Models
+class Fill(Base):
+    __tablename__ = "fills"
+    
+    id = Column(BigInteger, primary_key=True, autoincrement=True)
+    address = Column(String(64), index=True, nullable=False)
+    pair = Column(String(64), index=True, nullable=False)
+    is_long = Column(Boolean, nullable=False)
+    size = Column(Numeric(38,18), nullable=False)
+    price = Column(Numeric(38,18), nullable=False)
+    notional_usd = Column(Numeric(38,18), nullable=False)
+    fee = Column(Numeric(38,18), nullable=False, server_default="0")
+    side = Column(String(16), nullable=False)  # OPEN|CLOSE|...
+    maker_taker = Column(String(8), nullable=True)
+    block_number = Column(BigInteger, index=True, nullable=False)
+    block_hash = Column(String(66), nullable=True)
+    tx_hash = Column(String(66), index=True, nullable=False)
+    ts = Column(BigInteger, index=True, nullable=False)
+    
+    # Composite indexes for efficient queries
+    __table_args__ = (
+        Index('idx_fills_address_ts', 'address', 'ts'),
+        Index('idx_fills_pair_ts', 'pair', 'ts'),
+        Index('idx_fills_address_pair_ts', 'address', 'pair', 'ts'),
+    )
+
+class TradingPosition(Base):
+    __tablename__ = "trading_positions"
+    
+    id = Column(BigInteger, primary_key=True, autoincrement=True)
+    address = Column(String(64), index=True, nullable=False)
+    pair = Column(String(64), index=True, nullable=False)
+    is_long = Column(Boolean, nullable=False)
+    entry_px = Column(Numeric(38,18), nullable=False)
+    size = Column(Numeric(38,18), nullable=False)
+    opened_at = Column(BigInteger, index=True, nullable=False)
+    closed_at = Column(BigInteger, nullable=True)
+    pnl_realized = Column(Numeric(38,18), nullable=False, server_default="0")
+    fees = Column(Numeric(38,18), nullable=False, server_default="0")
+    funding = Column(Numeric(38,18), nullable=False, server_default="0")
+    tx_open = Column(String(66), nullable=False)
+    tx_close = Column(String(66), nullable=True)
+    
+    # Composite indexes for efficient queries
+    __table_args__ = (
+        Index('idx_trading_positions_address_opened', 'address', 'opened_at'),
+        Index('idx_trading_positions_address_closed', 'address', 'closed_at'),
+    )
+
+class CopyConfiguration(Base):
+    __tablename__ = "copy_configurations"
+    
+    id = Column(BigInteger, primary_key=True, autoincrement=True)
+    user_id = Column(BigInteger, index=True, nullable=False)
+    leader_address = Column(String(64), index=True, nullable=False)
+    sizing_mode = Column(String(32), nullable=False)  # "FIXED_NOTIONAL" or "PCT_EQUITY"
+    sizing_value = Column(Numeric(38,18), nullable=False)
+    max_slippage_bps = Column(BigInteger, nullable=False)
+    max_leverage = Column(Numeric(38,18), nullable=False)
+    notional_cap = Column(Numeric(38,18), nullable=False)
+    pair_filters = Column(String(512), nullable=True)  # JSON
+    is_active = Column(Boolean, nullable=False, server_default="true")
+    created_at = Column(BigInteger, index=True, nullable=False)
+    updated_at = Column(BigInteger, index=True, nullable=False)
+
+class CopyPosition(Base):
+    __tablename__ = "copy_positions"
+    
+    id = Column(BigInteger, primary_key=True, autoincrement=True)
+    user_id = Column(BigInteger, index=True, nullable=False)
+    leader_address = Column(String(64), index=True, nullable=False)
+    leader_tx_hash = Column(String(66), index=True, nullable=False)
+    copy_tx_hash = Column(String(66), index=True, nullable=False)
+    pair = Column(String(64), nullable=False)
+    is_long = Column(Boolean, nullable=False)
+    size = Column(Numeric(38,18), nullable=False)
+    entry_price = Column(Numeric(38,18), nullable=False)
+    copy_ratio = Column(Numeric(38,18), nullable=False)
+    opened_at = Column(BigInteger, index=True, nullable=False)
+    closed_at = Column(BigInteger, nullable=True)
+    pnl = Column(Numeric(38,18), nullable=False, server_default="0")
+    status = Column(String(16), nullable=False)  # "OPEN", "CLOSED", "LIQUIDATED"
+    
+    __table_args__ = (
+        Index('idx_copy_positions_user_leader', 'user_id', 'leader_address'),
+        Index('idx_copy_positions_user_status', 'user_id', 'status'),
+    )
