@@ -9,7 +9,7 @@ from typing import Dict, List, Tuple, Callable
 
 from src.bot.handlers import (
     start, wallet, trading, positions, portfolio, orders, settings,
-    user_types, advanced_trading
+    user_types, advanced_trading, risk_edu_handlers
 )
 from src.bot.handlers.copy_trading_commands import (
     copy_trading_handlers, alfa_refresh_callback, copy_status_callback
@@ -41,6 +41,8 @@ class HandlerRegistry:
             ("portfolio", self.user_middleware.require_user(portfolio.portfolio_handler)),
             ("orders", self.user_middleware.require_user(orders.orders_handler)),
             ("settings", self.user_middleware.require_user(settings.settings_handler)),
+            ("analyze", risk_edu_handlers.cmd_analyze),
+            ("calc", risk_edu_handlers.cmd_calc),
         ]
     
     def get_conversation_handlers(self) -> List[ConversationHandler]:

@@ -120,6 +120,14 @@ class Config:
         # Health Monitoring
         self.HEALTH_PORT = int(os.getenv('HEALTH_PORT', '8080'))
         
+        # Risk Education (non-blocking)
+        self.RISK_EDUCATION_ENABLED = os.getenv('RISK_EDUCATION_ENABLED', 'true').lower() == 'true'
+        self.RISK_WARN_LEVERAGE_HIGH = float(os.getenv('RISK_WARN_LEVERAGE_HIGH', '50'))
+        self.RISK_WARN_LEVERAGE_EXTREME = float(os.getenv('RISK_WARN_LEVERAGE_EXTREME', '200'))
+        self.RISK_WARN_LIQUIDATION_PCT = float(os.getenv('RISK_WARN_LIQUIDATION_PCT', '0.01'))
+        self.RISK_SCENARIO_STRESS_MOVE = float(os.getenv('RISK_SCENARIO_STRESS_MOVE', '0.02'))
+        self.RISK_PROTOCOL_MAX_LEVERAGE = int(os.getenv('RISK_PROTOCOL_MAX_LEVERAGE', '500'))
+        
         # Execution Mode
         self.DEFAULT_EXECUTION_MODE = os.getenv('DEFAULT_EXECUTION_MODE', 'DRY').upper()
     

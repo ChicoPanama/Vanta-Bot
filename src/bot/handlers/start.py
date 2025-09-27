@@ -88,12 +88,14 @@ async def help_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
     help_text = """
 🤖 **Vanta Bot Help**
 
-**Commands:**
+ **Commands:**
 /start - Initialize bot and wallet
 /wallet - View wallet balance  
 /trade - Open trading interface
 /positions - View open positions
 /portfolio - Portfolio analytics
+/analyze - Risk analysis for positions (education)
+/calc - Position sizing calculator
 /help - Show this help message
 
 **Features:**
