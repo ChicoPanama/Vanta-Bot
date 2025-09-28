@@ -258,10 +258,23 @@ class AvantisExecutor:
                     success=False,
                     error="Limit price required for limit orders"
                 )
-            
-            # Limit orders will be enabled when the Avantis SDK exposes the endpoint
-            raise NotImplementedError("Limit orders not yet implemented in SDK integration")
-            
+
+            # Until native limit-orders are exposed by the SDK, return a safe
+            # error with an attached quote so callers can see fees/size.
+            price_provider = await self._get_price_provider()
+            quote = await price_provider.quote_open(
+                pair=order.pair,
+                is_long=order.is_long,
+                collateral_usdc=order.collateral_usdc,
+                leverage=order.leverage,
+                slippage_pct=order.slippage_pct,
+            )
+            return TradeResult(
+                success=False,
+                error="Limit orders are not supported by the current SDK yet",
+                quote=quote,
+            )
+
         except Exception as e:
             logger.error(f"❌ Error executing limit order: {e}")
             return TradeResult(

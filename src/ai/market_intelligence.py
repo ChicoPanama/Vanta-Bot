@@ -6,6 +6,7 @@ Monitors price feeds and classifies market regimes for copy timing signals
 import asyncio
 import json
 import logging
+import os
 from datetime import datetime, timedelta
 from typing import Dict, List, Optional, Any
 from dataclasses import dataclass
@@ -116,23 +117,47 @@ class MarketIntelligence:
     async def _fetch_pyth_price(self, pyth_id: str) -> Optional[PriceData]:
         """Fetch price data from Pyth Network"""
         try:
-            # In production, this would connect to Pyth's WebSocket API
-            # For now, we'll simulate price data or use a REST API
-            
-            # Simulate price data for demonstration
-            # In real implementation, use Pyth's WebSocket API
+            # Optional production REST path (kept off by default to avoid test flakiness)
+            # Provide PYTH_REST_URL in env to enable, e.g. https://hermes.pyth.network
+            rest_url = os.getenv("PYTH_REST_URL")
+            if rest_url:
+                timeout = aiohttp.ClientTimeout(total=5, connect=3)
+                url = f"{rest_url.rstrip('/')}/{pyth_id}"
+                async with aiohttp.ClientSession(timeout=timeout) as session:
+                    async with session.get(url) as resp:
+                        if resp.status == 200:
+                            data = await resp.json()
+                            # Try common shapes; fall back to simulation on parse errors
+                            price = None
+                            conf = 0.9
+                            if isinstance(data, dict):
+                                price = data.get("price") or data.get("priceUsd") or data.get("emaPrice")
+                                conf = float(data.get("confidence", conf))
+                            elif isinstance(data, list) and data:
+                                item = data[0]
+                                if isinstance(item, dict):
+                                    price = item.get("price") or item.get("priceUsd") or item.get("emaPrice")
+                                    conf = float(item.get("confidence", conf))
+                            if price is not None:
+                                return PriceData(
+                                    symbol=pyth_id,
+                                    price=float(price),
+                                    timestamp=datetime.utcnow(),
+                                    confidence=float(conf),
+                                    source="pyth-rest",
+                                )
+
+            # Default: simulate price data (stable for tests)
             base_price = 50000 if 'BTC' in pyth_id else 3000 if 'ETH' in pyth_id else 100
-            
-            # Add some realistic price movement
-            price_change = np.random.normal(0, 0.001)  # 0.1% volatility
+            price_change = np.random.normal(0, 0.001)  # ~0.1% volatility
             current_price = base_price * (1 + price_change)
-            
+
             return PriceData(
                 symbol=pyth_id,
                 price=current_price,
                 timestamp=datetime.utcnow(),
                 confidence=0.95,
-                source="pyth"
+                source="pyth-sim"
             )
             
         except Exception as e:
