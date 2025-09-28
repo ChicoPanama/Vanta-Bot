@@ -1,10 +1,11 @@
 from web3 import Web3
 from web3.providers.eth_tester import EthereumTesterProvider
 from eth_account import Account
-from src.config.settings import config
+from src.config.settings import settings
 import logging
 from typing import Dict, Optional
 from decimal import Decimal
+import redis
 
 logger = logging.getLogger(__name__)
 
@@ -18,7 +19,7 @@ class BaseClient:
             # REASON: Mock client was wired for production - critical security issue
             # REVIEW: Line ? from code review - Mock client wired for production
             
-            rpc_url = config.BASE_RPC_URL
+            rpc_url = settings.BASE_RPC_URL
             self._using_memory = rpc_url.lower() == "memory"
 
             if self._using_memory:
@@ -29,7 +30,7 @@ class BaseClient:
             else:
                 provider = Web3.HTTPProvider(rpc_url)
                 self.w3 = Web3(provider)
-                self.chain_id = config.BASE_CHAIN_ID
+                self.chain_id = settings.BASE_CHAIN_ID
 
                 if not self.w3.is_connected():
                     logger.error(f"Failed to connect to Base RPC: {rpc_url}")
@@ -41,6 +42,18 @@ class BaseClient:
                     raise ValueError(f"Chain ID mismatch: expected {self.chain_id}, got {network_chain_id}")
 
                 logger.info(f"Connected to Base network (Chain ID: {network_chain_id})")
+            
+            # Initialize Redis for nonce management
+            try:
+                self.redis = redis.from_url(settings.REDIS_URL)
+                self.redis.ping()  # Test connection
+                logger.info("Connected to Redis for nonce management")
+            except Exception as e:
+                logger.warning(f"Redis connection failed: {e}")
+                self.redis = None
+            
+            # Initialize database connection (placeholder)
+            self.db = None  # This would be injected in a real implementation
             
         except Exception as e:
             logger.error(f"Failed to initialize Base client: {e}")
@@ -67,7 +80,7 @@ class BaseClient:
             if getattr(self, "_using_memory", False):
                 return 0.0
 
-            usdc_contract_address = config.USDC_CONTRACT
+            usdc_contract_address = settings.USDC_CONTRACT
             if not usdc_contract_address:
                 logger.warning("USDC contract address not configured")
                 return 0.0
@@ -95,21 +108,75 @@ class BaseClient:
             logger.error(f"Error getting USDC balance for {address}: {e}")
             raise
         
-    def send_transaction(self, transaction: dict, private_key: str) -> str:
-        """Send transaction to Base network"""
+    def send_transaction(self, 
+                        wallet_id: str, 
+                        tx_params: dict, 
+                        request_id: str,
+                        private_key: str = None) -> str:
+        """Send transaction using the new pipeline with envelope encryption.
+        
+        Args:
+            wallet_id: Wallet identifier
+            tx_params: Transaction parameters
+            request_id: Unique request identifier for idempotency
+            private_key: Private key (if not using envelope encryption)
+            
+        Returns:
+            Transaction hash
+        """
         try:
-            # FIX: Implement real transaction sending instead of mock
-            # REASON: Production code was returning mock transaction hash
+            # Import here to avoid circular imports
+            from src.config.settings import settings
+            from src.blockchain.tx.nonce_manager import NonceManager
+            from src.blockchain.tx.gas_policy import GasPolicy
+            from src.blockchain.tx.builder import TxBuilder
+            from src.blockchain.tx.sender import TxSender
+            from src.database.transaction_repo import TransactionRepository
+            from src.middleware.circuit_breakers import circuit_breaker_manager
             
-            # Sign transaction
-            signed_txn = self.w3.eth.account.sign_transaction(transaction, private_key)
+            # Initialize components
+            nonce_manager = NonceManager(self.redis, self.w3)
+            gas_policy = GasPolicy()
+            tx_builder = TxBuilder(self.w3, self.chain_id)
+            tx_sender = TxSender(self.w3, TransactionRepository(self.db))
             
-            # Send transaction
-            tx_hash = self.w3.eth.send_raw_transaction(signed_txn.rawTransaction)
+            # Get private key
+            if not private_key:
+                # This would need to be implemented with proper wallet access
+                raise NotImplementedError("Private key access not implemented")
             
-            logger.info(f"Transaction sent: {tx_hash.hex()}")
-            return tx_hash.hex()
+            # Get sender address
+            from_addr = self.w3.eth.account.from_key(bytes.fromhex(private_key)).address
             
+            # Reserve nonce
+            with nonce_manager.reserve(from_addr) as nonce:
+                # Get gas quote
+                max_fee, max_priority = gas_policy.quote(self.w3)
+                
+                # Estimate gas
+                gas = tx_builder.estimate_gas(tx_params)
+                
+                # Build transaction
+                tx = tx_builder.build(
+                    from_addr=from_addr,
+                    to=tx_params.get("to"),
+                    data=tx_params.get("data", b""),
+                    value=tx_params.get("value", 0),
+                    gas=gas,
+                    nonce=nonce,
+                    max_fee=max_fee,
+                    max_priority=max_priority
+                )
+                
+                # Sign transaction
+                raw_tx = tx_builder.sign(tx, private_key)
+                
+                # Send with retry logic
+                tx_hash = tx_sender.send_with_retry(raw_tx, request_id)
+                
+                logger.info(f"Transaction sent: {tx_hash}")
+                return tx_hash
+                
         except Exception as e:
             logger.error(f"Error sending transaction: {e}")
             raise

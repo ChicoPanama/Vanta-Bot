@@ -1,7 +1,8 @@
-from sqlalchemy import Column, Integer, String, Float, DateTime, Boolean, Text, JSON, BigInteger, Numeric, Index
+from sqlalchemy import Column, Integer, String, Float, DateTime, Boolean, Text, JSON, BigInteger, Numeric, Index, LargeBinary, UUID
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.sql import func
 from datetime import datetime
+import uuid
 
 Base = declarative_base()
 
@@ -12,12 +13,27 @@ class User(Base):
     telegram_id = Column(Integer, unique=True, nullable=False)
     username = Column(String(50))
     wallet_address = Column(String(42), unique=True)
-    encrypted_private_key = Column(Text)
+    encrypted_private_key = Column(Text)  # Legacy field - will be deprecated
     created_at = Column(DateTime, default=func.now())
     last_active = Column(DateTime, default=func.now())
     is_active = Column(Boolean, default=True)
     referral_code = Column(String(10), unique=True)
     referred_by = Column(Integer)
+
+
+class Wallet(Base):
+    """Wallet model with envelope encryption support."""
+    __tablename__ = "wallets"
+    
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    user_id = Column(UUID(as_uuid=True), nullable=False, index=True)
+    address = Column(String(64), unique=True, nullable=False, index=True)
+    ciphertext_privkey = Column(LargeBinary, nullable=False)
+    dek_wrapped = Column(LargeBinary, nullable=False)
+    encryption_version = Column(String(16), default="v2", nullable=False)
+    kms_key_id = Column(String(128), nullable=True)
+    created_at = Column(DateTime, server_default=func.now(), nullable=False)
+    rotated_at = Column(DateTime, nullable=True)
 
 class Position(Base):
     __tablename__ = 'positions'
@@ -154,3 +170,16 @@ class CopyPosition(Base):
         Index('idx_copy_positions_user_leader', 'user_id', 'leader_address'),
         Index('idx_copy_positions_user_status', 'user_id', 'status'),
     )
+
+
+class SentTransaction(Base):
+    """Table for tracking sent transactions to ensure idempotency."""
+    __tablename__ = "sent_transactions"
+    
+    id = Column(BigInteger, primary_key=True, autoincrement=True)
+    request_id = Column(String(128), unique=True, nullable=False, index=True)
+    tx_hash = Column(String(66), nullable=False, index=True)
+    wallet_id = Column(UUID(as_uuid=True), nullable=False, index=True)
+    created_at = Column(DateTime, server_default=func.now(), nullable=False)
+    confirmed_at = Column(DateTime, nullable=True)
+    status = Column(String(16), default="PENDING", nullable=False)  # PENDING, CONFIRMED, FAILED

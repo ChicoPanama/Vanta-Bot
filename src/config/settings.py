@@ -36,6 +36,10 @@ class Settings(BaseSettings):
     TRADER_PRIVATE_KEY: Optional[str] = Field(None, env="TRADER_PRIVATE_KEY")
     AWS_KMS_KEY_ID: Optional[str] = Field(None, env="AWS_KMS_KEY_ID")
     AWS_REGION: str = Field("us-east-1", env="AWS_REGION")
+    
+    # Key vault settings
+    LOCAL_WRAP_KEY_B64: Optional[str] = Field(None, env="LOCAL_WRAP_KEY_B64")
+    KEY_ENVELOPE_ENABLED: bool = Field(False, env="KEY_ENVELOPE_ENABLED")
 
     # Contracts / protocol
     AVANTIS_TRADING_CONTRACT: Optional[str] = Field(None, env="AVANTIS_TRADING_CONTRACT")
@@ -173,6 +177,23 @@ class Settings(BaseSettings):
 
     def is_live_mode(self) -> bool:
         return self.COPY_EXECUTION_MODE == "LIVE"
+
+    def build_key_vault(self):
+        """Build key vault service based on configuration."""
+        if self.AWS_KMS_KEY_ID:
+            try:
+                import boto3
+                kms_client = boto3.client("kms", region_name=self.AWS_REGION)
+                from src.security.key_vault import AwsKmsKeyVault
+                return AwsKmsKeyVault(kms_key_id=self.AWS_KMS_KEY_ID, kms_client=kms_client)
+            except ImportError:
+                raise ValueError("boto3 required for AWS KMS key vault")
+        
+        if self.LOCAL_WRAP_KEY_B64:
+            from src.security.key_vault import LocalFernetKeyVault
+            return LocalFernetKeyVault(self.LOCAL_WRAP_KEY_B64)
+        
+        raise ValueError("Either AWS_KMS_KEY_ID or LOCAL_WRAP_KEY_B64 must be configured")
 
     def runtime_summary(self) -> str:
         """Return a redacted runtime summary safe for logging."""
