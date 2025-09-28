@@ -1,8 +1,11 @@
-"""
-Configuration Package
-Configuration management for the Vanta Bot
-"""
+"""Configuration package exports."""
 
-from .settings import config
+try:  # pragma: no cover - allows importing config without installed dependencies
+    from .settings import Settings, config, get_settings, settings
+except Exception:  # noqa: BLE001
+    Settings = None  # type: ignore
+    settings = None  # type: ignore
+    config = None  # type: ignore
+    get_settings = None  # type: ignore
 
-__all__ = ['config']
+__all__ = ["Settings", "settings", "config", "get_settings"]

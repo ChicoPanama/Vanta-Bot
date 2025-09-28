@@ -8,6 +8,9 @@ from src.config.settings_new import settings
 from src.bot.ui.keyboards import kb
 from src.bot.ui.formatting import fmt_usd, fmt_px
 from src.utils.ratelimit import pos_limiter
+from src.utils.logging import get_logger
+
+logger = get_logger(__name__)
 
 # Import for mode badge
 try:

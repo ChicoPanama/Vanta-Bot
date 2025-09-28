@@ -15,7 +15,7 @@ async def start_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
     user = update.effective_user
     
     # Check if user exists in database
-    db_user = db.get_user(user.id)
+    db_user = await db.get_user(user.id)
     
     if not db_user:
         # Create new wallet for user
@@ -23,7 +23,7 @@ async def start_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
             wallet = wallet_manager.create_wallet()
             
             # Create user in database
-            db_user = db.create_user(
+            db_user = await db.create_user(
                 telegram_id=user.id,
                 username=user.username,
                 wallet_address=wallet['address'],

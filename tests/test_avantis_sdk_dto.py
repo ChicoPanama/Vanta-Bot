@@ -135,7 +135,7 @@ class TestAvantisExecutor:
     
     @pytest.mark.asyncio
     async def test_open_market_dry_mode(self, executor):
-        """Test open_market in DRY mode returns DRYRUN"""
+        """Test open_market in DRY mode is rejected"""
         # Set execution mode to DRY
         set_execution_mode("DRY")
         
@@ -168,10 +168,11 @@ class TestAvantisExecutor:
             mock_get_provider.return_value = mock_provider
             
             result = await executor.open_market(order)
-            
-            assert result.success is True
-            assert result.tx_hash == "DRYRUN"
+
+            assert result.success is False
+            assert result.tx_hash is None
             assert result.quote is not None
+            assert "not in LIVE" in (result.error or "")
     
     @pytest.mark.asyncio
     async def test_open_market_live_mode_calls_sdk(self, executor):
@@ -368,10 +369,11 @@ class TestIntegration:
             mock_get_provider.return_value = mock_provider
             
             result = await executor.open_market(order)
-            
-            # In DRY mode, should not call SDK execution methods
-            assert result.tx_hash == "DRYRUN"
-            assert result.success is True
+
+            # In DRY mode, trades are rejected prior to SDK execution
+            assert result.success is False
+            assert result.tx_hash is None
+            assert "not in LIVE" in (result.error or "")
 
 
 if __name__ == "__main__":

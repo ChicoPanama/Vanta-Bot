@@ -44,14 +44,15 @@ class ExternalAPIError(AppError):
     """External API communication errors"""
     
     def __init__(
-        self, 
-        message: str, 
+        self,
+        message: str,
         service: str,
         status_code: Optional[int] = None,
         response_data: Optional[Dict[str, Any]] = None,
-        error_code: Optional[str] = None
+        error_code: Optional[str] = None,
+        details: Optional[Dict[str, Any]] = None,
     ):
-        super().__init__(message, error_code)
+        super().__init__(message, error_code, details)
         self.service = service
         self.status_code = status_code
         self.response_data = response_data or {}
@@ -178,12 +179,43 @@ class SecurityError(AppError):
 
 class InsufficientFundsError(TradingError):
     """Insufficient funds for trading"""
-    pass
+
+    def __init__(
+        self,
+        message: str,
+        *,
+        pair: str,
+        required: Optional[float] = None,
+        available: Optional[float] = None,
+        side: Optional[str] = None,
+        amount: Optional[float] = None,
+        error_code: Optional[str] = None,
+    ):
+        super().__init__(message, pair=pair, side=side, amount=amount, error_code=error_code)
+        self.required = required
+        self.available = available
+        if required is not None:
+            self.details.update({"required": required})
+        if available is not None:
+            self.details.update({"available": available})
 
 
 class InvalidPositionError(TradingError):
     """Invalid position parameters"""
-    pass
+
+    def __init__(
+        self,
+        message: str,
+        *,
+        pair: str,
+        size: float,
+        side: Optional[str] = None,
+        amount: Optional[float] = None,
+        error_code: Optional[str] = None,
+    ):
+        super().__init__(message, pair=pair, side=side, amount=amount, error_code=error_code)
+        self.size = size
+        self.details.update({"size": size})
 
 
 class MarketClosedError(TradingError):
@@ -193,7 +225,25 @@ class MarketClosedError(TradingError):
 
 class SlippageExceededError(TradingError):
     """Slippage tolerance exceeded"""
-    pass
+
+    def __init__(
+        self,
+        message: str,
+        *,
+        pair: str,
+        slippage: Optional[float] = None,
+        max_slippage: Optional[float] = None,
+        side: Optional[str] = None,
+        amount: Optional[float] = None,
+        error_code: Optional[str] = None,
+    ):
+        super().__init__(message, pair=pair, side=side, amount=amount, error_code=error_code)
+        self.slippage = slippage
+        self.max_slippage = max_slippage
+        if slippage is not None:
+            self.details.update({"slippage": slippage})
+        if max_slippage is not None:
+            self.details.update({"max_slippage": max_slippage})
 
 
 class LeaderNotFoundError(CopyTradingError):
@@ -203,12 +253,52 @@ class LeaderNotFoundError(CopyTradingError):
 
 class LeaderInactiveError(CopyTradingError):
     """Copy trading leader is inactive"""
-    pass
+
+    def __init__(
+        self,
+        message: str,
+        *,
+        leader_address: str,
+        last_activity: int,
+        follower_id: Optional[int] = None,
+        pair: Optional[str] = None,
+        error_code: Optional[str] = None,
+    ):
+        super().__init__(
+            message,
+            leader_address=leader_address,
+            follower_id=follower_id,
+            pair=pair,
+            error_code=error_code,
+        )
+        self.last_activity = last_activity
+        self.details.update({"last_activity": last_activity})
 
 
 class CopyLimitExceededError(CopyTradingError):
     """Copy trading limits exceeded"""
-    pass
+
+    def __init__(
+        self,
+        message: str,
+        *,
+        leader_address: str,
+        current_count: int,
+        max_count: int,
+        follower_id: Optional[int] = None,
+        pair: Optional[str] = None,
+        error_code: Optional[str] = None,
+    ):
+        super().__init__(
+            message,
+            leader_address=leader_address,
+            follower_id=follower_id,
+            pair=pair,
+            error_code=error_code,
+        )
+        self.current_count = current_count
+        self.max_count = max_count
+        self.details.update({"current_count": current_count, "max_count": max_count})
 
 
 def handle_exception(exc: Exception, context: Optional[Dict[str, Any]] = None) -> AppError:
@@ -222,18 +312,19 @@ def handle_exception(exc: Exception, context: Optional[Dict[str, Any]] = None) -
     if isinstance(exc, ValueError):
         return ValidationError(str(exc), details=context or {})
     elif isinstance(exc, KeyError):
-        return ConfigError(f"Missing configuration: {exc}", details=context or {})
+        key = exc.args[0] if exc.args else "unknown"
+        return ConfigError(f"Missing configuration: {key}", details=context or {})
     elif isinstance(exc, ConnectionError):
         return ExternalAPIError(
-            f"Connection failed: {exc}", 
+            f"Connection failed: {exc}",
             service="unknown",
-            details=context or {}
+            details=context or {},
         )
     elif isinstance(exc, TimeoutError):
         return ExternalAPIError(
-            f"Request timeout: {exc}", 
+            f"Request timeout: {exc}",
             service="unknown",
-            details=context or {}
+            details=context or {},
         )
     else:
         return AppError(

@@ -3,10 +3,12 @@ from __future__ import annotations
 from dataclasses import dataclass
 from decimal import Decimal
 from typing import Optional, Dict, Any, List
+import asyncio
 import os
 import math
 import time
 import json
+from functools import partial
 from sqlalchemy.orm import Session
 from sqlalchemy import text
 
@@ -160,7 +162,7 @@ class CopyExecutor:
                     """),
                     {"user_id": user_id}
                 ).fetchall()
-                
+
                 # Calculate 30-day PnL
                 pnl_result = session.execute(
                     text("""
@@ -175,17 +177,36 @@ class CopyExecutor:
                         "thirty_days_ago": int(time.time()) - (30 * 24 * 60 * 60)
                     }
                 ).fetchone()
-                
+
                 total_pnl = float(pnl_result.total_pnl or 0)
-                
+
+                closed_positions = session.execute(
+                    text("""
+                        SELECT size, entry_price, pnl
+                        FROM copy_positions
+                        WHERE user_id = :user_id AND status = 'CLOSED'
+                    """),
+                    {"user_id": user_id}
+                ).fetchall()
+
+                def _notional(row: Any) -> float:
+                    size = float(row.size or 0)
+                    entry = float(row.entry_price or 0)
+                    return size * entry
+
+                total_volume = sum(_notional(p) for p in positions) + sum(_notional(p) for p in closed_positions)
+                wins = sum(1 for p in closed_positions if float(p.pnl or 0) > 0)
+                losses = sum(1 for p in closed_positions if float(p.pnl or 0) < 0)
+                win_rate = (wins / (wins + losses) * 100.0) if (wins + losses) else 0.0
+
                 return {
                     "leaders": len(configs),
                     "active_configs": [dict(c._mapping) for c in configs],
                     "open_positions": len(positions),
                     "positions": [dict(p._mapping) for p in positions],
                     "copy_pnl_30d": f"{total_pnl:.2f}",
-                    "total_volume": 0.0,  # TODO: Calculate from positions
-                    "win_rate": 0.0  # TODO: Calculate from positions
+                    "total_volume": total_volume,
+                    "win_rate": win_rate
                 }
                 
         except Exception as e:
@@ -399,33 +420,44 @@ class CopyExecutor:
             logger.error("Failed to mirror close trade: {}", e)
             return False
 
-    async def _execute_trade(self, user_id: int, pair: str, is_long: bool, notional: Decimal, 
+    async def _execute_trade(self, user_id: int, pair: str, is_long: bool, notional: Decimal,
                            order_type: str, limit_px: Optional[Decimal]) -> str:
-        """
-        Execute a trade on the Avantis protocol.
-        TODO: Bind to actual Avantis trade operation (Trader SDK / client).
-        Keep a single choke-point so you can swap sim/mock/live easily.
-        """
-        # Mock implementation - replace with actual Avantis SDK call
-        logger.info("EXECUTE {} {} notional={} limit_px={} order_type={}", 
-                   pair, "LONG" if is_long else "SHORT", notional, limit_px, order_type)
-        
-        # Simulate transaction hash
-        import hashlib
-        tx_data = f"{user_id}_{pair}_{is_long}_{notional}_{limit_px}_{time.time()}"
-        tx_hash = "0x" + hashlib.sha256(tx_data.encode()).hexdigest()[:64]
-        
-        # TODO: Replace with actual Avantis SDK call:
-        # return await self.avantis_client.open_position(
-        #     wallet_address=user_wallet,
-        #     private_key=user_private_key,
-        #     asset=pair,
-        #     size=float(notional),
-        #     is_long=is_long,
-        #     leverage=leverage
-        # )
-        
-        return tx_hash
+        """Execute a trade on the Avantis protocol via the configured account provider."""
+        logger.info(
+            "EXECUTE %s %s notional=%s limit_px=%s order_type=%s",
+            pair,
+            "LONG" if is_long else "SHORT",
+            notional,
+            limit_px,
+            order_type,
+        )
+
+        if hasattr(self.account, "execute_trade"):
+            return await self.account.execute_trade(
+                user_id=user_id,
+                pair=pair,
+                is_long=is_long,
+                notional=notional,
+                order_type=order_type,
+                limit_price=limit_px,
+            )
+
+        if hasattr(self.account, "open_position"):
+            loop = asyncio.get_running_loop()
+            return await loop.run_in_executor(
+                None,
+                partial(
+                    self.account.open_position,
+                    user_id=user_id,
+                    pair=pair,
+                    is_long=is_long,
+                    notional=float(notional),
+                    order_type=order_type,
+                    limit_price=float(limit_px) if limit_px is not None else None,
+                ),
+            )
+
+        raise RuntimeError("Account provider does not expose a trade execution API")
     
     async def _check_leverage(self, user_id: int, new_notional: Decimal, max_lev: Decimal) -> bool:
         """Check if adding this position would exceed leverage limits"""

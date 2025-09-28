@@ -1,12 +1,15 @@
 from __future__ import annotations
 import os, json, time
+import logging
 from decimal import Decimal
 from typing import Optional
+
+logger = logging.getLogger(__name__)
 try:
-    import aioredis  # aioredis==2+
-except Exception as e:
-    logger.warning(f"aioredis import failed: {e}")
-    aioredis = None
+    import redis.asyncio as redis_async
+except Exception as e:  # pragma: no cover - optional dependency path
+    logger.warning("redis async import failed", exc_info=e)
+    redis_async = None
 
 from src.services.trading.trade_drafts import TradeDraft, DraftStore as MemoryStore
 
@@ -20,7 +23,9 @@ class RedisDraftStore:
 
     async def _client(self):
         if self._r is None:
-            self._r = await aioredis.from_url(self.url, encoding="utf-8", decode_responses=True)
+            if redis_async is None:
+                raise RuntimeError("redis.asyncio is required but unavailable")
+            self._r = await redis_async.from_url(self.url, encoding="utf-8", decode_responses=True)
         return self._r
 
     def _key(self, user_id: int) -> str:
@@ -58,7 +63,7 @@ class RedisDraftStore:
 
 # factory
 async def get_draft_store():
-    if REDIS_URL and aioredis:
+    if REDIS_URL and redis_async:
         return RedisDraftStore(REDIS_URL)
     # fallback to memory store (sync interface)
     return MemoryStore()

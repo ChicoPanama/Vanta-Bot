@@ -17,7 +17,7 @@ async def positions_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) 
     db_user = context.user_data['db_user']
     
     # Get user's open positions
-    positions = db.get_user_positions(db_user.id, 'OPEN')
+    positions = await db.get_user_positions(db_user.id, 'OPEN')
     
     if not positions:
         no_positions_text = NO_POSITIONS_MESSAGE

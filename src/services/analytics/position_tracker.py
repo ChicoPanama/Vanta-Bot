@@ -5,7 +5,7 @@ import os
 from datetime import datetime, timedelta, timezone
 from typing import Dict, Any, List, Optional
 
-import aioredis
+import redis.asyncio as redis
 from loguru import logger
 from sqlalchemy import text
 from sqlalchemy.engine import Engine
@@ -27,7 +27,7 @@ class PositionTracker:
     """
     def __init__(self, engine: Engine) -> None:
         self.engine = engine
-        self.redis: Optional[aioredis.Redis] = None
+        self.redis: Optional[redis.Redis] = None
         self.running = False
 
     async def start(self) -> None:
@@ -37,7 +37,7 @@ class PositionTracker:
             return
             
         self.running = True
-        self.redis = await aioredis.from_url(REDIS_URL, decode_responses=True)
+        self.redis = await redis.from_url(REDIS_URL, decode_responses=True)
         logger.info("PositionTracker started with Redis {}", REDIS_URL)
         
         try:
@@ -105,7 +105,7 @@ class PositionTracker:
                 addr = r["address"]
                 key = f"stats:{WINDOW}:{addr.lower()}"
                 r["window"] = WINDOW
-                pipe.hmset(key, {k: str(v) for k, v in r.items()})
+                pipe.hset(key, mapping={k: str(v) for k, v in r.items()})
                 pipe.expire(key, 120)
             await pipe.execute()
             
@@ -134,7 +134,7 @@ class PositionTracker:
     async def get_stats(self, address: str) -> Dict[str, Any]:
         """Get cached statistics for a specific address"""
         if not self.redis:
-            self.redis = await aioredis.from_url(REDIS_URL, decode_responses=True)
+            self.redis = await redis.from_url(REDIS_URL, decode_responses=True)
             
         key = f"stats:{WINDOW}:{address.lower()}"
         data = await self.redis.hgetall(key)
@@ -143,7 +143,7 @@ class PositionTracker:
     async def get_leaderboard(self, limit: int = 50) -> List[Dict[str, Any]]:
         """Get top traders based on cached statistics"""
         if not self.redis:
-            self.redis = await aioredis.from_url(REDIS_URL, decode_responses=True)
+            self.redis = await redis.from_url(REDIS_URL, decode_responses=True)
         
         # Get all stats keys
         pattern = f"stats:{WINDOW}:*"

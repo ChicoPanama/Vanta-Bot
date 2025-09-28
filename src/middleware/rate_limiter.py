@@ -3,7 +3,7 @@ Rate Limiting with Redis
 Comprehensive rate limiting for trading operations and user interactions
 """
 
-import aioredis
+import redis.asyncio as redis
 import time
 import os
 import logging
@@ -26,11 +26,11 @@ class RateLimitError(Exception):
 class RateLimiter:
     def __init__(self, redis_url: Optional[str] = None):
         self.redis_url = redis_url or settings.REDIS_URL
-        self._redis: Optional[aioredis.Redis] = None
+        self._redis: Optional[redis.Redis] = None
         
-    async def get_redis(self) -> aioredis.Redis:
+    async def get_redis(self) -> redis.Redis:
         if self._redis is None:
-            self._redis = await aioredis.from_url(self.redis_url)
+            self._redis = await redis.from_url(self.redis_url)
         return self._redis
     
     async def check_limit(

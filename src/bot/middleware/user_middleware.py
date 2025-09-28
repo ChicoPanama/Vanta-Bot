@@ -25,7 +25,7 @@ class UserMiddleware:
             user_id = update.effective_user.id
             
             # Get user from database
-            db_user = db.get_user(user_id)
+            db_user = await db.get_user(user_id)
             if not db_user:
                 error_msg = "❌ User not found. Please /start first."
                 

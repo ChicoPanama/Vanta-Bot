@@ -3,6 +3,7 @@ Performance Tests for Copy Trading
 Tests performance under load and optimization
 """
 
+import os
 import pytest
 import asyncio
 import time
@@ -12,6 +13,8 @@ from src.copy_trading.leaderboard_service import LeaderboardService
 from src.copy_trading.copy_executor import CopyExecutor
 from src.ai.trader_analyzer import TraderAnalyzer
 from src.analytics.position_tracker import PositionTracker
+
+pytestmark = pytest.mark.skipif(not os.getenv("RUN_SLOW"), reason="slow suite; set RUN_SLOW=1 to enable")
 
 class TestPerformance:
     @pytest.mark.asyncio

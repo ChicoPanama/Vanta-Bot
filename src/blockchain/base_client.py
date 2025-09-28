@@ -1,42 +1,12 @@
 from web3 import Web3
+from web3.providers.eth_tester import EthereumTesterProvider
 from eth_account import Account
 from src.config.settings import config
 import logging
-from typing import Dict, Any, Optional
+from typing import Dict, Optional
 from decimal import Decimal
 
 logger = logging.getLogger(__name__)
-
-class MockBaseClient:
-    """Mock Base client for testing without network connection"""
-    def __init__(self):
-        # Create a mock Web3 instance
-        self.w3 = Web3()
-        self.chain_id = config.BASE_CHAIN_ID
-        
-    def get_balance(self, address: str) -> float:
-        """Mock get ETH balance"""
-        return 1.0  # Mock balance
-        
-    def get_usdc_balance(self, address: str) -> float:
-        """Mock get USDC balance"""
-        return 1000.0  # Mock USDC balance
-        
-    def send_transaction(self, transaction: dict, private_key: str) -> str:
-        """Mock send transaction"""
-        return f"0x{'a' * 64}"  # Mock transaction hash
-        
-    def create_wallet(self) -> dict:
-        """Mock create wallet"""
-        account = Account.create()
-        return {
-            'address': account.address,
-            'private_key': account.key.hex()
-        }
-        
-    def get_transaction_count(self, address: str) -> int:
-        """Mock get transaction count"""
-        return 0
 
 
 class BaseClient:
@@ -48,21 +18,29 @@ class BaseClient:
             # REASON: Mock client was wired for production - critical security issue
             # REVIEW: Line ? from code review - Mock client wired for production
             
-            self.w3 = Web3(Web3.HTTPProvider(config.BASE_RPC_URL))
-            self.chain_id = config.BASE_CHAIN_ID
-            
-            # Verify connection
-            if not self.w3.is_connected():
-                logger.error(f"Failed to connect to Base RPC: {config.BASE_RPC_URL}")
-                raise ConnectionError("Cannot connect to Base network")
-            
-            # Verify chain ID
-            network_chain_id = self.w3.eth.chain_id
-            if network_chain_id != self.chain_id:
-                logger.error(f"Chain ID mismatch: expected {self.chain_id}, got {network_chain_id}")
-                raise ValueError(f"Chain ID mismatch: expected {self.chain_id}, got {network_chain_id}")
-            
-            logger.info(f"Connected to Base network (Chain ID: {network_chain_id})")
+            rpc_url = config.BASE_RPC_URL
+            self._using_memory = rpc_url.lower() == "memory"
+
+            if self._using_memory:
+                provider = EthereumTesterProvider()
+                self.w3 = Web3(provider)
+                self.chain_id = self.w3.eth.chain_id
+                logger.info("Initialized Base client with in-memory Ethereum tester provider")
+            else:
+                provider = Web3.HTTPProvider(rpc_url)
+                self.w3 = Web3(provider)
+                self.chain_id = config.BASE_CHAIN_ID
+
+                if not self.w3.is_connected():
+                    logger.error(f"Failed to connect to Base RPC: {rpc_url}")
+                    raise ConnectionError("Cannot connect to Base network")
+
+                network_chain_id = self.w3.eth.chain_id
+                if network_chain_id != self.chain_id:
+                    logger.error(f"Chain ID mismatch: expected {self.chain_id}, got {network_chain_id}")
+                    raise ValueError(f"Chain ID mismatch: expected {self.chain_id}, got {network_chain_id}")
+
+                logger.info(f"Connected to Base network (Chain ID: {network_chain_id})")
             
         except Exception as e:
             logger.error(f"Failed to initialize Base client: {e}")
@@ -78,7 +56,7 @@ class BaseClient:
             return float(balance_eth)
         except Exception as e:
             logger.error(f"Error getting ETH balance for {address}: {e}")
-            return 0.0
+            raise
         
     def get_usdc_balance(self, address: str) -> float:
         """Get USDC balance for address"""
@@ -86,6 +64,9 @@ class BaseClient:
             # FIX: Implement real USDC balance fetching
             # REASON: Production code was returning mock data
             # USDC is ERC-20 token with 6 decimals
+            if getattr(self, "_using_memory", False):
+                return 0.0
+
             usdc_contract_address = config.USDC_CONTRACT
             if not usdc_contract_address:
                 logger.warning("USDC contract address not configured")
@@ -112,7 +93,7 @@ class BaseClient:
             
         except Exception as e:
             logger.error(f"Error getting USDC balance for {address}: {e}")
-            return 0.0
+            raise
         
     def send_transaction(self, transaction: dict, private_key: str) -> str:
         """Send transaction to Base network"""
@@ -155,22 +136,23 @@ class BaseClient:
             return self.w3.eth.get_transaction_count(address)
         except Exception as e:
             logger.error(f"Error getting transaction count for {address}: {e}")
-            return 0
+            raise
 
 
-# FIX: Use proper client based on environment instead of always mock
-# REASON: Mock client was wired for production - critical security issue
-# REVIEW: Line ? from code review - Mock client wired for production
+_CLIENT: Optional[BaseClient] = None
 
-def get_base_client():
-    """Get appropriate Base client based on environment"""
-    if config.is_production() or config.is_development():
-        # Use real client for production and development
-        return BaseClient()
-    else:
-        # Use mock client only for testing
-        logger.warning("Using mock Base client - should only be used in testing")
-        return MockBaseClient()
 
-# Initialize client based on environment
-base_client = get_base_client()
+def get_base_client() -> BaseClient:
+    """Return a singleton BaseClient wired to the configured RPC."""
+    global _CLIENT
+    if _CLIENT is None:
+        _CLIENT = BaseClient()
+    return _CLIENT
+
+
+class _BaseClientProxy:
+    def __getattr__(self, item):  # pragma: no cover - thin proxy
+        return getattr(get_base_client(), item)
+
+
+base_client = _BaseClientProxy()

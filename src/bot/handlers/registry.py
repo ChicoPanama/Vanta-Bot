@@ -8,8 +8,17 @@ from telegram.ext import ContextTypes, ConversationHandler, CallbackQueryHandler
 from typing import Dict, List, Tuple, Callable
 
 from src.bot.handlers import (
-    start, wallet, trading, positions, portfolio, orders, settings,
-    user_types, advanced_trading, risk_edu_handlers
+    start,
+    wallet,
+    trading,
+    positions,
+    portfolio,
+    orders,
+    settings,
+    user_types,
+    advanced_trading,
+    risk_edu_handlers,
+    ai_insights_handlers,
 )
 from src.bot.handlers.copy_trading_commands import (
     copy_trading_handlers, alfa_refresh_callback, copy_status_callback
@@ -43,6 +52,7 @@ class HandlerRegistry:
             ("settings", self.user_middleware.require_user(settings.settings_handler)),
             ("analyze", risk_edu_handlers.cmd_analyze),
             ("calc", risk_edu_handlers.cmd_calc),
+            ("alpha", ai_insights_handlers.alpha_command),
         ]
     
     def get_conversation_handlers(self) -> List[ConversationHandler]:
@@ -95,7 +105,9 @@ class CallbackRouter:
             await settings.settings_handler(update, context)
         elif callback_data == "main_menu":
             await start.start_handler(update, context)
-        
+        elif callback_data == "ai_insights":
+            await ai_insights_handlers.alpha_command(update, context)
+
         # User type selection handlers
         elif callback_data == "user_type_simple":
             await user_types.simple_user_handler(update, context)
@@ -155,6 +167,18 @@ class CallbackRouter:
             await alfa_refresh_callback(update, context)
         elif callback_data == "copy_status":
             await copy_status_callback(update, context)
+        elif callback_data == "alfa_leaderboard":
+            await ai_insights_handlers.alfa_leaderboard(update, context)
+        elif callback_data == "ai_market_signal":
+            await ai_insights_handlers.ai_market_signal(update, context)
+        elif callback_data == "copy_opportunities":
+            await ai_insights_handlers.copy_opportunities(update, context)
+        elif callback_data == "ai_dashboard":
+            await ai_insights_handlers.ai_dashboard(update, context)
+        elif callback_data == "market_analysis":
+            await ai_insights_handlers.market_analysis(update, context)
+        elif callback_data == "trader_analytics":
+            await ai_insights_handlers.trader_analytics(update, context)
     
     async def _handle_quick_trade(self, update: Update, context: ContextTypes.DEFAULT_TYPE, callback_data: str):
         """Handle quick trade callbacks"""

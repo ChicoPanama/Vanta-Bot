@@ -323,7 +323,7 @@ async def test_get_leaderboard_by_category_pnl(leaderboard_service):
         assert traders[0]['realized_pnl_clean_usd'] == 100000  # Highest PnL first
 
 @pytest.mark.asyncio
-async def test_search_traders(leaderboard_service, mock_db_pool):
+async def test_search_traders(leaderboard_service, mock_db_pool, mock_redis):
     """Test searching traders by address"""
     db_pool, conn = mock_db_pool
     

@@ -6,9 +6,13 @@ from __future__ import annotations
 import logging
 from typing import Dict, Any, Optional
 from decimal import Decimal
+from datetime import datetime, timezone, timedelta
 
 from src.services.trading.execution_service import get_execution_service
 from src.config.settings_new import settings
+from src.database.operations import db
+from src.database import models
+from sqlalchemy import select, func, case, and_
 
 log = logging.getLogger(__name__)
 
@@ -79,6 +83,18 @@ async def follow(
             "error": str(e)
         }
 
+def _ts_to_iso(value):
+    if value in (None, 0):
+        return None
+    if isinstance(value, datetime):
+        dt = value if value.tzinfo else value.replace(tzinfo=timezone.utc)
+        return dt.isoformat()
+    try:
+        return datetime.fromtimestamp(int(value), tz=timezone.utc).isoformat()
+    except Exception:  # pragma: no cover - best effort formatting
+        return None
+
+
 async def status(user_id: int, trader_key: str) -> Dict[str, Any]:
     """
     Get copy trading status for a user-trader pair
@@ -91,15 +107,88 @@ async def status(user_id: int, trader_key: str) -> Dict[str, Any]:
         Dict with status information
     """
     try:
-        # For now, return basic status
-        # In the future, this could check active positions, PnL, etc.
+        cutoff_ts = int((datetime.now(timezone.utc) - timedelta(days=30)).timestamp())
+
+        async def _load(session):
+            filters = [models.CopyPosition.user_id == user_id]
+            if trader_key != "*":
+                filters.append(models.CopyPosition.leader_address == trader_key.lower())
+
+            volume_expr = models.CopyPosition.size * models.CopyPosition.entry_price
+            closed_filter = models.CopyPosition.status == "CLOSED"
+            open_filter = models.CopyPosition.status == "OPEN"
+            recent_filter = models.CopyPosition.opened_at >= cutoff_ts
+            recent_closed_filter = and_(closed_filter, recent_filter)
+
+            aggregate_stmt = (
+                select(
+                    func.coalesce(func.sum(case((closed_filter, models.CopyPosition.pnl), else_=0)), 0).label("total_pnl"),
+                    func.coalesce(func.sum(case((closed_filter, volume_expr), else_=0)), 0).label("closed_volume"),
+                    func.coalesce(func.sum(case((open_filter, volume_expr), else_=0)), 0).label("open_volume"),
+                    func.coalesce(func.sum(case((closed_filter, 1), else_=0)), 0).label("closed_count"),
+                    func.coalesce(
+                        func.sum(
+                            case((and_(closed_filter, models.CopyPosition.pnl > 0), 1), else_=0)
+                        ),
+                        0,
+                    ).label("wins"),
+                    func.coalesce(func.sum(case((recent_closed_filter, models.CopyPosition.pnl), else_=0)), 0).label("pnl_30d"),
+                    func.coalesce(
+                        func.sum(
+                            case((and_(recent_closed_filter, models.CopyPosition.pnl > 0), 1), else_=0)
+                        ),
+                        0,
+                    ).label("wins_30d"),
+                    func.coalesce(func.sum(case((recent_closed_filter, 1), else_=0)), 0).label("closed_30d"),
+                    func.coalesce(func.sum(case((and_(recent_filter, open_filter), volume_expr), else_=0)), 0).label("open_volume_30d"),
+                    func.coalesce(func.sum(case((and_(recent_filter, closed_filter), volume_expr), else_=0)), 0).label("closed_volume_30d"),
+                    func.coalesce(func.sum(case((open_filter, 1), else_=0)), 0).label("open_count"),
+                    func.max(models.CopyPosition.opened_at).label("last_opened"),
+                    func.max(models.CopyPosition.closed_at).label("last_closed"),
+                ).where(*filters)
+            )
+
+            return (await session.execute(aggregate_stmt)).one()
+
+        summary = await db.run_in_session(_load)
+
+        total_pnl = float(summary.total_pnl or 0.0)
+        open_volume = float(summary.open_volume or 0.0)
+        closed_volume = float(summary.closed_volume or 0.0)
+        total_volume = open_volume + closed_volume
+        pnl_30d = float(summary.pnl_30d or 0.0)
+        open_volume_30d = float(summary.open_volume_30d or 0.0)
+        closed_volume_30d = float(summary.closed_volume_30d or 0.0)
+        volume_30d = open_volume_30d + closed_volume_30d
+        active_copies = int(summary.open_count or 0)
+        closed_count = int(summary.closed_count or 0)
+        wins = int(summary.wins or 0)
+        win_rate = (wins / closed_count * 100.0) if closed_count else 0.0
+        closed_30d = int(summary.closed_30d or 0)
+        wins_30d = int(summary.wins_30d or 0)
+        win_rate_30d = (wins_30d / closed_30d * 100.0) if closed_30d else 0.0
+
         return {
             "ok": True,
             "user_id": user_id,
             "trader_key": trader_key,
-            "active_copies": 0,  # TODO: count active positions from this trader
-            "total_pnl": 0.0,    # TODO: calculate PnL from copy trades
-            "last_copy_at": None # TODO: timestamp of last copy trade
+            "active_copies": active_copies,
+            "total_pnl": total_pnl,
+            "total_volume": total_volume,
+            "open_volume": open_volume,
+            "closed_volume": closed_volume,
+            "pnl_30d": pnl_30d,
+            "volume_30d": volume_30d,
+            "open_volume_30d": open_volume_30d,
+            "closed_volume_30d": closed_volume_30d,
+            "win_rate": win_rate,
+            "win_rate_30d": win_rate_30d,
+            "last_copy_at": _ts_to_iso(summary.last_opened),
+            "last_closed_at": _ts_to_iso(summary.last_closed),
+            "closed_copies": closed_count,
+            "wins": wins,
+            "wins_30d": wins_30d,
+            "closed_copies_30d": closed_30d,
         }
     except Exception as e:
         log.exception(f"Status check failed for user {user_id}, trader {trader_key}: {e}")

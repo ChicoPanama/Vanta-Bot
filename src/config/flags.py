@@ -151,6 +151,12 @@ class FeatureFlags:
         if self.is_dry_mode():
             return 5.0  # Higher tolerance in dry mode
         else:
+            env_value = os.getenv("DEFAULT_SLIPPAGE_PCT")
+            if env_value is not None:
+                try:
+                    return float(env_value)
+                except ValueError:
+                    pass
             return settings.DEFAULT_SLIPPAGE_PCT
     
     def get_max_leverage(self) -> int:
@@ -161,6 +167,12 @@ class FeatureFlags:
         if self.is_dry_mode():
             return min(settings.MAX_LEVERAGE, 100)  # Lower limit in dry mode
         else:
+            env_limit = os.getenv("MAX_COPY_LEVERAGE")
+            if env_limit is not None:
+                try:
+                    return int(env_limit)
+                except ValueError:
+                    pass
             return settings.MAX_COPY_LEVERAGE
     
     def get_position_limits(self) -> tuple[int, int]:

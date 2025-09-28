@@ -17,7 +17,7 @@ async def test_basic_functionality():
     try:
         # Test 1: Database connection
         print("1. Testing database connection...")
-        db.create_tables()
+        await db.create_tables()
         print("   ✅ Database connected and tables created")
         
         # Test 2: Wallet creation
@@ -60,7 +60,7 @@ async def test_basic_functionality():
         
         # Test 6: Database operations
         print("6. Testing database operations...")
-        test_user = db.create_user(
+        test_user = await db.create_user(
             telegram_id=12345,
             username="test_user",
             wallet_address=wallet['address'],
@@ -71,7 +71,7 @@ async def test_basic_functionality():
             print("   ✅ User creation successful")
             
             # Test position creation
-            test_position = db.create_position(
+            test_position = await db.create_position(
                 user_id=test_user.id,
                 symbol="BTC",
                 side="LONG",
@@ -133,7 +133,7 @@ async def test_analytics():
         from src.services.analytics import Analytics
         
         analytics = Analytics()
-        stats = analytics.get_user_stats(1)  # Test with user ID 1
+        stats = await analytics.get_user_stats(1)  # Test with user ID 1
         
         print(f"   ✅ Analytics working - Total trades: {stats['total_trades']}")
         return True

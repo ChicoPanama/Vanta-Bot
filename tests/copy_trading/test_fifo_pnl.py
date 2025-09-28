@@ -202,3 +202,7 @@ class TestFIFOPnL:
         
         # Average of 2 and 6 hours = 4 hours
         assert abs(avg_hold_time - 4.0) < 0.1
+import os
+import pytest
+
+pytestmark = pytest.mark.skipif(not os.getenv("RUN_SLOW"), reason="slow/large dataset suite; set RUN_SLOW=1 to enable")

@@ -15,7 +15,7 @@ user_middleware = UserMiddleware()
 async def _get_account_balance_usd(user_id: int) -> Decimal:
     """Get user's account balance in USD"""
     try:
-        db_user = db.get_user(user_id)
+        db_user = await db.get_user(user_id)
         if not db_user:
             return Decimal("10000")  # Default for demo
         

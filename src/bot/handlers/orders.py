@@ -18,12 +18,7 @@ async def orders_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
     
     try:
         # Get user's pending orders
-        session = db.get_session()
-        orders = session.query(db.Order).filter(
-            db.Order.user_id == db_user.id,
-            db.Order.status == 'PENDING'
-        ).all()
-        session.close()
+        orders = await db.list_pending_orders(db_user.id)
         
         if not orders:
             no_orders_text = NO_ORDERS_MESSAGE
@@ -48,14 +43,15 @@ async def orders_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         for order in orders:
             order_type_emoji = "📊" if order.order_type == "MARKET" else "⏰" if order.order_type == "LIMIT" else "🛑"
             side_emoji = "🟢" if order.side == "LONG" else "🔴"
-            
-            orders_text += f"""
-{order_type_emoji} **{order.symbol}** {side_emoji} {order.side}
-Type: {order.order_type} | Size: ${order.size:,.2f}
-Leverage: {order.leverage}x | Price: ${order.price:.4f if order.price else 'Market'}
-Status: {order.status}
-───────────
-            """
+            price_text = f"${order.price:.4f}" if order.price is not None else "Market"
+
+            orders_text += (
+                f"{order_type_emoji} **{order.symbol}** {side_emoji} {order.side}\n"
+                f"Type: {order.order_type} | Size: ${order.size:,.2f}\n"
+                f"Leverage: {order.leverage}x | Price: {price_text}\n"
+                f"Status: {order.status}\n"
+                "───────────\n"
+            )
         
         if update.callback_query:
             await update.callback_query.edit_message_text(
@@ -78,4 +74,3 @@ Status: {order.status}
             await update.callback_query.answer(error_msg)
         else:
             await update.message.reply_text(error_msg)
-

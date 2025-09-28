@@ -34,13 +34,13 @@ async def position_management_handler(update: Update, context: ContextTypes.DEFA
     user_id = update.effective_user.id
     
     # Get user from database
-    db_user = db.get_user(user_id)
+    db_user = await db.get_user(user_id)
     if not db_user:
         await query.answer("❌ User not found")
         return
     
     # Get open positions count
-    positions = db.get_user_positions(db_user.id, 'OPEN')
+    positions = await db.get_user_positions(db_user.id, 'OPEN')
     
     await query.edit_message_text(
         f"🔄 **Advanced Position Management**\n\n"
@@ -154,13 +154,13 @@ async def close_all_positions_handler(update: Update, context: ContextTypes.DEFA
     
     try:
         # Get user from database
-        db_user = db.get_user(user_id)
+        db_user = await db.get_user(user_id)
         if not db_user:
             await query.answer("❌ User not found")
             return
         
         # Get all open positions
-        positions = db.get_user_positions(db_user.id, 'OPEN')
+        positions = await db.get_user_positions(db_user.id, 'OPEN')
         
         if not positions:
             await query.answer("No open positions to close")
@@ -180,7 +180,7 @@ async def close_all_positions_handler(update: Update, context: ContextTypes.DEFA
                 )
                 
                 # Update position status in database
-                db.update_position(position.id, status='CLOSED', tx_hash=tx_hash)
+                await db.update_position(position.id, status='CLOSED', tx_hash=tx_hash)
                 closed_count += 1
                 
             except Exception as e:
@@ -199,12 +199,12 @@ async def close_profitable_positions_handler(update: Update, context: ContextTyp
     user_id = update.effective_user.id
     
     try:
-        db_user = db.get_user(user_id)
+        db_user = await db.get_user(user_id)
         if not db_user:
             await query.answer("❌ User not found")
             return
         
-        positions = db.get_user_positions(db_user.id, 'OPEN')
+        positions = await db.get_user_positions(db_user.id, 'OPEN')
         profitable_positions = [p for p in positions if p.pnl > 0]
         
         if not profitable_positions:
@@ -221,7 +221,7 @@ async def close_profitable_positions_handler(update: Update, context: ContextTyp
                     private_key,
                     position.id
                 )
-                db.update_position(position.id, status='CLOSED', tx_hash=tx_hash)
+                await db.update_position(position.id, status='CLOSED', tx_hash=tx_hash)
                 closed_count += 1
             except Exception as e:
                 logger.error(f"Error closing profitable position {position.id}: {e}")
@@ -238,12 +238,12 @@ async def close_losing_positions_handler(update: Update, context: ContextTypes.D
     user_id = update.effective_user.id
     
     try:
-        db_user = db.get_user(user_id)
+        db_user = await db.get_user(user_id)
         if not db_user:
             await query.answer("❌ User not found")
             return
         
-        positions = db.get_user_positions(db_user.id, 'OPEN')
+        positions = await db.get_user_positions(db_user.id, 'OPEN')
         losing_positions = [p for p in positions if p.pnl < 0]
         
         if not losing_positions:
@@ -260,7 +260,7 @@ async def close_losing_positions_handler(update: Update, context: ContextTypes.D
                     private_key,
                     position.id
                 )
-                db.update_position(position.id, status='CLOSED', tx_hash=tx_hash)
+                await db.update_position(position.id, status='CLOSED', tx_hash=tx_hash)
                 closed_count += 1
             except Exception as e:
                 logger.error(f"Error closing losing position {position.id}: {e}")
@@ -277,7 +277,7 @@ async def position_sizing_handler(update: Update, context: ContextTypes.DEFAULT_
     user_id = update.effective_user.id
     
     try:
-        db_user = db.get_user(user_id)
+        db_user = await db.get_user(user_id)
         if not db_user:
             await query.answer("❌ User not found")
             return
@@ -324,7 +324,7 @@ async def portfolio_risk_handler(update: Update, context: ContextTypes.DEFAULT_T
     user_id = update.effective_user.id
     
     try:
-        db_user = db.get_user(user_id)
+        db_user = await db.get_user(user_id)
         if not db_user:
             await query.answer("❌ User not found")
             return
@@ -368,7 +368,7 @@ async def performance_handler(update: Update, context: ContextTypes.DEFAULT_TYPE
     user_id = update.effective_user.id
     
     try:
-        db_user = db.get_user(user_id)
+        db_user = await db.get_user(user_id)
         if not db_user:
             await query.answer("❌ User not found")
             return
@@ -377,7 +377,7 @@ async def performance_handler(update: Update, context: ContextTypes.DEFAULT_TYPE
         analytics = Analytics()
         stats = analytics.get_user_stats(db_user.id)
         
-        positions = db.get_user_positions(db_user.id, 'OPEN')
+        positions = await db.get_user_positions(db_user.id, 'OPEN')
         unrealized_pnl = sum(pos.pnl for pos in positions)
         
         performance_text = f"""
@@ -417,18 +417,13 @@ async def trade_history_handler(update: Update, context: ContextTypes.DEFAULT_TY
     user_id = update.effective_user.id
     
     try:
-        db_user = db.get_user(user_id)
+        db_user = await db.get_user(user_id)
         if not db_user:
             await query.answer("❌ User not found")
             return
         
         # Get recent trades from database
-        session = db.get_session()
-        recent_trades = session.query(db.Position).filter(
-            db.Position.user_id == db_user.id,
-            db.Position.status == 'CLOSED'
-        ).order_by(db.Position.closed_at.desc()).limit(10).all()
-        session.close()
+        recent_trades = await db.list_recent_closed_positions(db_user.id, limit=10)
         
         if not recent_trades:
             history_text = "📊 **Trade History**\n\nNo completed trades found."

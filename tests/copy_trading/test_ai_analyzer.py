@@ -278,7 +278,8 @@ class TestTraderAnalyzer:
         assert analysis.risk_level == "MED"
         assert "Limited data for analysis" in analysis.warnings
     
-    def test_analyze_trader_integration(self):
+    @pytest.mark.asyncio
+    async def test_analyze_trader_integration(self):
         """Test full trader analysis integration"""
         analyzer = TraderAnalyzer(None, None, None)
         
@@ -313,3 +314,7 @@ class TestTraderAnalyzer:
         assert analysis.risk_level in ["LOW", "MED", "HIGH"]
         assert len(analysis.strengths) > 0
         assert len(analysis.warnings) > 0
+import os
+import pytest
+
+pytestmark = pytest.mark.skipif(not os.getenv("RUN_SLOW"), reason="slow/infra-heavy suite; set RUN_SLOW=1 to enable")

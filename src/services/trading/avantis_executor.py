@@ -10,7 +10,7 @@ import logging
 from typing import Optional, Dict, Any
 from dataclasses import dataclass
 
-from avantis_trader_sdk import TradeInput, TradeInputOrderType
+from avantis_trader_sdk.types import TradeInput, TradeInputOrderType
 
 from src.integrations.avantis.sdk_client import get_sdk_client
 from src.services.markets.avantis_price_provider import get_price_provider
@@ -70,7 +70,34 @@ class AvantisExecutor:
             self._price_provider = get_price_provider()
         return self._price_provider
     
-    def _build_trade_input(self, order: OrderRequest, trader_address: str, pair_index: int) -> TradeInput:
+    @dataclass
+    class _TradeInputCompat:
+        trader: str
+        open_price: Optional[float]
+        pair_index: int
+        collateral_in_trade: float
+        is_long: bool
+        leverage: float
+        index: int
+        tp: float
+        sl: float
+        timestamp: int
+
+        def to_sdk(self) -> TradeInput:
+            return TradeInput(
+                trader=self.trader,
+                open_price=self.open_price,
+                pair_index=self.pair_index,
+                collateral_in_trade=self.collateral_in_trade,
+                is_long=self.is_long,
+                leverage=self.leverage,
+                index=self.index,
+                tp=self.tp,
+                sl=self.sl,
+                timestamp=self.timestamp,
+            )
+
+    def _build_trade_input(self, order: OrderRequest, trader_address: str, pair_index: int = 0) -> "AvantisExecutor._TradeInputCompat":
         """
         Build TradeInput from order request using snake_case fields
         
@@ -82,9 +109,9 @@ class AvantisExecutor:
         Returns:
             TradeInput: SDK trade input object
         """
-        return TradeInput(
+        return AvantisExecutor._TradeInputCompat(
             trader=trader_address,
-            open_price=order.limit_price if order.order_type == "limit" else None,
+            open_price=order.limit_price if order.limit_price is not None else None,
             pair_index=pair_index,
             collateral_in_trade=order.collateral_usdc,
             is_long=order.is_long,
@@ -92,7 +119,7 @@ class AvantisExecutor:
             index=0,
             tp=order.tp or 0,
             sl=order.sl or 0,
-            timestamp=0
+            timestamp=0,
         )
     
     def _get_order_type(self, order: OrderRequest, zero_fee: bool = False) -> TradeInputOrderType:
@@ -157,13 +184,14 @@ class AvantisExecutor:
                        f"${order.collateral_usdc} @ {order.leverage}x, slippage {order.slippage_pct}%, "
                        f"fee ${quote['opening_fee_usdc']:.4f}, impact {quote.get('impact_spread', 'N/A')}")
             
-            # Check execution mode
-            if _execution_mode == "DRY":
-                logger.info("🔍 DRY RUN MODE - Would execute trade")
+            # Enforce execution mode
+            if _execution_mode != "LIVE":
+                logger.warning(
+                    "Execution blocked while COPY_EXECUTION_MODE=%s", _execution_mode
+                )
                 return TradeResult(
-                    success=True,
-                    tx_hash="DRYRUN",
-                    trade_index=0,
+                    success=False,
+                    error="Executor is not in LIVE mode; enable COPY_EXECUTION_MODE=LIVE to trade.",
                     quote=quote
                 )
             
@@ -181,8 +209,9 @@ class AvantisExecutor:
             
             # Build and execute trade
             order_type = self._get_order_type(order, zero_fee)
+            sdk_input = trade_input.to_sdk() if hasattr(trade_input, "to_sdk") else trade_input
             tx = await client.trade.build_trade_open_tx(
-                trade_input, 
+                sdk_input, 
                 order_type, 
                 order.slippage_pct
             )
@@ -230,7 +259,7 @@ class AvantisExecutor:
                     error="Limit price required for limit orders"
                 )
             
-            # TODO: Implement proper limit order functionality when SDK supports it
+            # Limit orders will be enabled when the Avantis SDK exposes the endpoint
             raise NotImplementedError("Limit orders not yet implemented in SDK integration")
             
         except Exception as e:
@@ -256,7 +285,16 @@ class AvantisExecutor:
         """
         try:
             client = await self._get_sdk_client()
-            
+
+            if _execution_mode != "LIVE":
+                logger.warning(
+                    "Close blocked while COPY_EXECUTION_MODE=%s", _execution_mode
+                )
+                return TradeResult(
+                    success=False,
+                    error="Executor is not in LIVE mode; enable COPY_EXECUTION_MODE=LIVE to trade."
+                )
+
             # Build close trade transaction
             tx = await client.trade.build_trade_close_tx(
                 pair_index=pair_index,
@@ -308,14 +346,16 @@ class AvantisExecutor:
             
             # Build trade input for gas estimation
             trade_input = self._build_trade_input(order, trader_address)
-            pair_index = await self._get_price_provider().get_pair_index(order.pair)
+            pair_index = await (await self._get_price_provider()).get_pair_index(order.pair)
+            # update pair_index before building tx
             trade_input.pair_index = pair_index
             
             order_type = self._get_order_type(order)
             
             # Build transaction (without sending)
+            sdk_input = trade_input.to_sdk() if hasattr(trade_input, "to_sdk") else trade_input
             tx = await client.trade.build_trade_open_tx(
-                trade_input, 
+                sdk_input, 
                 order_type, 
                 order.slippage_pct
             )
@@ -414,6 +454,6 @@ def set_execution_mode(mode: str) -> bool:
     if mode == "LIVE":
         logger.warning("⚠️ LIVE MODE ENABLED - Real trades will be executed!")
     else:
-        logger.info("🔍 DRY MODE ENABLED - No real trades will be executed")
+        logger.info("🔍 DRY MODE ENABLED - Trade submissions will be rejected")
     
     return True

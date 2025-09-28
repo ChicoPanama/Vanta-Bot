@@ -2,7 +2,7 @@
 from __future__ import annotations
 from typing import List, Dict, Any, Optional
 import os
-import aioredis
+import redis.asyncio as redis
 from sqlalchemy import text
 from sqlalchemy.engine import Engine
 from decimal import Decimal
@@ -17,13 +17,13 @@ REDIS_URL = os.getenv("REDIS_URL", "redis://localhost:6379")
 class LeaderboardService:
     def __init__(self, engine: Engine):
         self.engine = engine
-        self.redis: Optional[aioredis.Redis] = None
+        self.redis: Optional[redis.Redis] = None
         self.pnl = PnlService(engine)
 
     async def _get_redis(self):
         """Get Redis connection, create if needed"""
         if not self.redis:
-            self.redis = await aioredis.from_url(REDIS_URL, decode_responses=True)
+            self.redis = await redis.from_url(REDIS_URL, decode_responses=True)
         return self.redis
 
     async def top_traders(self, limit: int = 50) -> List[Dict[str, Any]]:

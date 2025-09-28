@@ -121,8 +121,9 @@ def setup_logging() -> None:
         def emit(self, record):
             # Get corresponding Loguru level if it exists
             try:
-                level = logger.level(record.levelname).name
-            except ValueError:
+                lvl = logger.level(record.levelname)
+                level = lvl.name if lvl is not None else record.levelno
+            except Exception:
                 level = record.levelno
             
             # Find caller from where the logged message originated
@@ -131,9 +132,12 @@ def setup_logging() -> None:
                 frame = frame.f_back
                 depth += 1
             
-            logger.opt(depth=depth, exception=record.exc_info).log(
-                level, record.getMessage()
-            )
+            try:
+                if hasattr(logger, "log"):
+                    logger.log(level, record.getMessage())
+            except Exception:
+                # No-op fallback when loguru is stubbed in tests
+                pass
     
     # Intercept standard library logging
     logging.basicConfig(handlers=[InterceptHandler()], level=0, force=True)
@@ -156,7 +160,7 @@ def setup_logging() -> None:
 
 def get_logger(name: str) -> Any:
     """Get a logger instance with the given name"""
-    return logger.bind(module=name)
+    return logger.bind(module=name, trace_id="")
 
 
 def log_function_call(func_name: str, **kwargs) -> None:

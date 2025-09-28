@@ -1,10 +1,11 @@
 import asyncio
-from src.database.operations import db
-from src.database.models import Position
-from src.services.price_service import price_service
-from telegram import Bot
-from src.config.settings import config
 import logging
+
+from telegram import Bot
+
+from src.config.settings import config
+from src.database.operations import db
+from src.services.price_service import price_service
 
 logger = logging.getLogger(__name__)
 
@@ -19,19 +20,14 @@ class PositionMonitor:
             try:
                 # This is a simplified version - you'd get all users
                 # For now, just monitoring logic
-                session = db.get_session()
-                positions = session.query(Position).filter(
-                    Position.status == 'OPEN'
-                ).all()
-                
+                positions = await db.list_open_positions()
+
                 for position in positions:
                     await self.check_position(position)
-                    
-                session.close()
-                
+
             except Exception as e:
                 logger.error(f"Error monitoring positions: {e}")
-                
+
             await asyncio.sleep(self.check_interval)
             
     async def check_position(self, position):
@@ -57,22 +53,23 @@ class PositionMonitor:
             if pnl_ratio <= liquidation_threshold:
                 await self.liquidate_position(position)
                 
-            # Save updates
-            session = db.get_session()
-            session.merge(position)
-            session.commit()
-            session.close()
-            
+            # Persist updates
+            await db.update_position(
+                position.id,
+                current_price=current_price,
+                pnl=position.pnl,
+            )
+
         except Exception as e:
             logger.error(f"Error checking position {position.id}: {e}")
-            
+
     async def liquidate_position(self, position):
         """Handle position liquidation"""
         try:
-            position.status = 'LIQUIDATED'
-            
+            await db.update_position(position.id, status='LIQUIDATED')
+
             # Notify user
-            user = db.get_user_by_id(position.user_id)
+            user = await db.get_user_by_id(position.user_id)
             if user:
                 liquidation_msg = f"""
 🚨 **Position Liquidated!**

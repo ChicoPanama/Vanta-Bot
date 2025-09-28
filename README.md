@@ -146,6 +146,13 @@ ENVIRONMENT=production python main.py
 | **Container** | Docker | Deployment |
 | **Monitoring** | Custom metrics | Observability |
 
+## ✅ **QA Snapshot (2025-09-28)**
+
+- `pytest -k "not test_performance"` → **221 passed**, 26 skipped, 13 deselected (slow AI/FIFO suites remain behind `RUN_SLOW=1`).
+- Copy-trading sizing, notional caps, and configuration validation updated to match integration expectations.
+- Web3 event indexer and analytics trackers now support in-memory testing with async-friendly connection handling.
+- Outstanding action items: replace placeholder (`...`) modules, wire real Avantis/Web3 clients for production paths, and address remaining TODOs noted in the comprehensive review.
+
 ## 📁 **Project Structure**
 
 ```

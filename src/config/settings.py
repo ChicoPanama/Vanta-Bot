@@ -1,241 +1,225 @@
-"""
-Configuration Settings
-Centralized configuration management for the Vanta Bot
-"""
+"""Central application configuration using typed environment settings."""
+
+from __future__ import annotations
 
 import os
-from typing import Optional, List
-from dotenv import load_dotenv
+from functools import lru_cache
+from typing import List, Optional
 
-# Load environment variables
-load_dotenv()
+from pydantic import Field, field_validator
+from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
-class Config:
-    """Configuration class for the Vanta Bot"""
-    
-    def __init__(self):
-        """Initialize configuration with environment variables"""
-        # Environment
-        self.ENVIRONMENT = os.getenv('ENVIRONMENT', 'development')
-        self.DEBUG = os.getenv('DEBUG', 'false').lower() == 'true'
-        self.LOG_LEVEL = os.getenv('LOG_LEVEL', 'INFO')
-        self.LOG_JSON = os.getenv('LOG_JSON', 'false').lower() == 'true'
-        
-        # Telegram
-        self.TELEGRAM_BOT_TOKEN = os.getenv('TELEGRAM_BOT_TOKEN')
-        
-        # Base Chain
-        self.BASE_RPC_URL = os.getenv('BASE_RPC_URL', 'https://mainnet.base.org')
-        self.BASE_CHAIN_ID = int(os.getenv('BASE_CHAIN_ID', 8453))
-        self.BASE_WS_URL = os.getenv('BASE_WS_URL', 'wss://mainnet.base.org')
-        
-        # Database
-        self.DATABASE_URL = os.getenv('DATABASE_URL', 'sqlite:///vanta_bot.db')
-        
-        # Redis
-        self.REDIS_URL = os.getenv('REDIS_URL', 'redis://localhost:6379')
-        
-        # Security
-        self.ENCRYPTION_KEY = os.getenv('ENCRYPTION_KEY')
-        
-        # Contracts
-        self.AVANTIS_TRADING_CONTRACT = os.getenv('AVANTIS_TRADING_CONTRACT')
-        self.AVANTIS_VAULT_CONTRACT = os.getenv('AVANTIS_VAULT_CONTRACT')
-        self.USDC_CONTRACT = os.getenv('USDC_CONTRACT', '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913')
-        
-        # Avantis SDK Configuration
-        self.TRADER_PRIVATE_KEY = os.getenv('TRADER_PRIVATE_KEY')
-        self.AWS_KMS_KEY_ID = os.getenv('AWS_KMS_KEY_ID')
-        self.AWS_REGION = os.getenv('AWS_REGION', 'us-east-1')
-        self.PYTH_WS_URL = os.getenv('PYTH_WS_URL', 'wss://hermes.pyth.network/ws')
-        
-        # Copy Trading Configuration
-        self.COPY_EXECUTION_MODE = os.getenv('COPY_EXECUTION_MODE', 'DRY')
-        self.DEFAULT_SLIPPAGE_PCT = float(os.getenv('DEFAULT_SLIPPAGE_PCT', '1.0'))
-        
-        # Trading Configuration
-        self.MAX_LEVERAGE = int(os.getenv('MAX_LEVERAGE', 500))
-        self.MIN_POSITION_SIZE = int(os.getenv('MIN_POSITION_SIZE', 1))  # USDC
-        self.MAX_POSITION_SIZE = int(os.getenv('MAX_POSITION_SIZE', 100000))  # USDC
-        
-        # Copy Trading Limits
-        self.LEADER_ACTIVE_HOURS = int(os.getenv('LEADER_ACTIVE_HOURS', 72))
-        self.LEADER_MIN_TRADES_30D = int(os.getenv('LEADER_MIN_TRADES_30D', 300))
-        self.LEADER_MIN_VOLUME_30D_USD = int(os.getenv('LEADER_MIN_VOLUME_30D_USD', 10000000))
-        self.MAX_COPY_SLIPPAGE_BPS = int(os.getenv('MAX_COPY_SLIPPAGE_BPS', 200))
-        self.MAX_COPY_LEVERAGE = int(os.getenv('MAX_COPY_LEVERAGE', 100))
-        self.MAX_COPYTRADERS_PER_USER = int(os.getenv('MAX_COPYTRADERS_PER_USER', 5))
-        self.MAX_FOLLOWS_PER_COPYTRADER = int(os.getenv('MAX_FOLLOWS_PER_COPYTRADER', 10))
-        
-        # Indexer Configuration
-        self.INDEXER_BACKFILL_RANGE = int(os.getenv('INDEXER_BACKFILL_RANGE', 50000))
-        self.INDEXER_PAGE = int(os.getenv('INDEXER_PAGE', 2000))
-        self.INDEXER_SLEEP_WS = int(os.getenv('INDEXER_SLEEP_WS', 2))
-        self.INDEXER_SLEEP_HTTP = int(os.getenv('INDEXER_SLEEP_HTTP', 5))
-        self.EVENT_BACKFILL_BLOCKS = int(os.getenv('EVENT_BACKFILL_BLOCKS', 1000))
-        self.EVENT_MONITORING_INTERVAL = int(os.getenv('EVENT_MONITORING_INTERVAL', 5))
-        
-        # Performance Tuning
-        self.AI_MODEL_UPDATE_INTERVAL = int(os.getenv('AI_MODEL_UPDATE_INTERVAL', 3600))  # 1 hour
-        self.LEADERBOARD_CACHE_TTL = int(os.getenv('LEADERBOARD_CACHE_TTL', 300))      # 5 minutes
-        self.POSITION_TRACKER_INTERVAL = int(os.getenv('POSITION_TRACKER_INTERVAL', 60))   # 1 minute
-        self.EVENT_INDEXER_BATCH_SIZE = int(os.getenv('EVENT_INDEXER_BATCH_SIZE', 1000))
-        
-        # Rate Limiting
-        self.COPY_EXECUTION_RATE_LIMIT = int(os.getenv('COPY_EXECUTION_RATE_LIMIT', 10))   # per minute
-        self.TELEGRAM_MESSAGE_RATE_LIMIT = int(os.getenv('TELEGRAM_MESSAGE_RATE_LIMIT', 30)) # per minute per user
-        
-        # Monitoring
-        self.ENABLE_METRICS = os.getenv('ENABLE_METRICS', 'true').lower() == 'true'
-        self.SENTRY_DSN = os.getenv('SENTRY_DSN')
-        
-        # External APIs
-        self.COINGECKO_API_KEY = os.getenv('COINGECKO_API_KEY')
-        self.ALPHA_VANTAGE_API_KEY = os.getenv('ALPHA_VANTAGE_API_KEY')
-        
-        # Email/SMTP (for alerts)
-        self.SMTP_SERVER = os.getenv('SMTP_SERVER')
-        self.SMTP_PORT = int(os.getenv('SMTP_PORT', 587))
-        self.SMTP_USER = os.getenv('SMTP_USER')
-        self.SMTP_PASSWORD = os.getenv('SMTP_PASSWORD')
-        self.ADMIN_EMAIL = os.getenv('ADMIN_EMAIL')
-        
-        # Admin Controls
-        self.ADMIN_USER_IDS = self._parse_admin_user_ids()
-        self.SUPER_ADMIN_IDS = self._parse_super_admin_user_ids()
-        
-        # Emergency Controls
-        self.EMERGENCY_STOP = os.getenv('EMERGENCY_STOP', 'false').lower() == 'true'
-        self.EMERGENCY_STOP_COPY_TRADING = os.getenv('EMERGENCY_STOP_COPY_TRADING', 'false').lower() == 'true'
-        self.PAUSE_NEW_FOLLOWS = os.getenv('PAUSE_NEW_FOLLOWS', 'false').lower() == 'true'
-        self.MAINTENANCE_MODE = os.getenv('MAINTENANCE_MODE', 'false').lower() == 'true'
-        
-        # Risk Management
-        self.MAX_POSITION_SIZE_USD = int(os.getenv('MAX_POSITION_SIZE_USD', '100000'))
-        self.MAX_ACCOUNT_RISK_PCT = float(os.getenv('MAX_ACCOUNT_RISK_PCT', '0.10'))
-        self.LIQUIDATION_BUFFER_PCT = float(os.getenv('LIQUIDATION_BUFFER_PCT', '0.05'))
-        self.MAX_DAILY_LOSS_PCT = float(os.getenv('MAX_DAILY_LOSS_PCT', '0.20'))
-        
-        # Health Monitoring
-        self.HEALTH_PORT = int(os.getenv('HEALTH_PORT', '8080'))
-        
-        # Risk Education (non-blocking)
-        self.RISK_EDUCATION_ENABLED = os.getenv('RISK_EDUCATION_ENABLED', 'true').lower() == 'true'
-        self.RISK_WARN_LEVERAGE_HIGH = float(os.getenv('RISK_WARN_LEVERAGE_HIGH', '50'))
-        self.RISK_WARN_LEVERAGE_EXTREME = float(os.getenv('RISK_WARN_LEVERAGE_EXTREME', '200'))
-        self.RISK_WARN_LIQUIDATION_PCT = float(os.getenv('RISK_WARN_LIQUIDATION_PCT', '0.01'))
-        self.RISK_SCENARIO_STRESS_MOVE = float(os.getenv('RISK_SCENARIO_STRESS_MOVE', '0.02'))
-        self.RISK_PROTOCOL_MAX_LEVERAGE = int(os.getenv('RISK_PROTOCOL_MAX_LEVERAGE', '500'))
-        
-        # Execution Mode
-        self.DEFAULT_EXECUTION_MODE = os.getenv('DEFAULT_EXECUTION_MODE', 'DRY').upper()
-    
-    def _parse_admin_user_ids(self) -> List[int]:
-        """Parse admin user IDs from environment variable"""
-        admin_ids_str = os.getenv('ADMIN_USER_IDS', '')
-        if not admin_ids_str:
+class Settings(BaseSettings):
+    """Application configuration loaded from environment variables."""
+
+    # Environment & logging
+    ENVIRONMENT: str = Field("development", env="ENVIRONMENT")
+    DEBUG: bool = Field(False, env="DEBUG")
+    LOG_LEVEL: str = Field("INFO", env="LOG_LEVEL")
+    LOG_JSON: bool = Field(False, env="LOG_JSON")
+
+    # Telegram / bot
+    TELEGRAM_BOT_TOKEN: Optional[str] = Field(None, env="TELEGRAM_BOT_TOKEN")
+
+    # Blockchain / Base network
+    BASE_RPC_URL: str = Field("https://mainnet.base.org", env="BASE_RPC_URL")
+    BASE_CHAIN_ID: int = Field(8453, env="BASE_CHAIN_ID")
+    BASE_WS_URL: Optional[str] = Field(None, env="BASE_WS_URL")
+
+    # Data stores
+    DATABASE_URL: str = Field("sqlite+aiosqlite:///vanta_bot.db", env="DATABASE_URL")
+    REDIS_URL: str = Field("redis://localhost:6379/0", env="REDIS_URL")
+
+    # Security & secrets
+    ENCRYPTION_KEY: Optional[str] = Field(None, env="ENCRYPTION_KEY")
+    TRADER_PRIVATE_KEY: Optional[str] = Field(None, env="TRADER_PRIVATE_KEY")
+    AWS_KMS_KEY_ID: Optional[str] = Field(None, env="AWS_KMS_KEY_ID")
+    AWS_REGION: str = Field("us-east-1", env="AWS_REGION")
+
+    # Contracts / protocol
+    AVANTIS_TRADING_CONTRACT: Optional[str] = Field(None, env="AVANTIS_TRADING_CONTRACT")
+    AVANTIS_VAULT_CONTRACT: Optional[str] = Field(None, env="AVANTIS_VAULT_CONTRACT")
+    USDC_CONTRACT: str = Field(
+        "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913", env="USDC_CONTRACT"
+    )
+
+    # Copy trading / execution
+    COPY_EXECUTION_MODE: str = Field("DRY", env="COPY_EXECUTION_MODE")
+    DEFAULT_SLIPPAGE_PCT: float = Field(1.0, env="DEFAULT_SLIPPAGE_PCT")
+    MAX_LEVERAGE: int = Field(500, env="MAX_LEVERAGE")
+    MAX_COPY_LEVERAGE: int = Field(100, env="MAX_COPY_LEVERAGE")
+    MIN_POSITION_SIZE: int = Field(1, env="MIN_POSITION_SIZE")
+    MAX_POSITION_SIZE: int = Field(100_000, env="MAX_POSITION_SIZE")
+
+    # Leaderboard / eligibility thresholds
+    LEADER_ACTIVE_HOURS: int = Field(72, env="LEADER_ACTIVE_HOURS")
+    LEADER_MIN_TRADES_30D: int = Field(300, env="LEADER_MIN_TRADES_30D")
+    LEADER_MIN_VOLUME_30D_USD: int = Field(10_000_000, env="LEADER_MIN_VOLUME_30D_USD")
+
+    # Rate limiting & monitoring
+    COPY_EXECUTION_RATE_LIMIT: int = Field(10, env="COPY_EXECUTION_RATE_LIMIT")
+    TELEGRAM_MESSAGE_RATE_LIMIT: int = Field(30, env="TELEGRAM_MESSAGE_RATE_LIMIT")
+    ENABLE_METRICS: bool = Field(True, env="ENABLE_METRICS")
+    SENTRY_DSN: Optional[str] = Field(None, env="SENTRY_DSN")
+
+    # Admin & control flags (accept CSV strings in env for tests)
+    ADMIN_USER_IDS: List[int] | str = Field(default_factory=list)
+    SUPER_ADMIN_IDS: List[int] | str = Field(default_factory=list)
+
+    EMERGENCY_STOP: bool = Field(False, env="EMERGENCY_STOP")
+    EMERGENCY_STOP_COPY_TRADING: bool = Field(False, env="EMERGENCY_STOP_COPY_TRADING")
+    PAUSE_NEW_FOLLOWS: bool = Field(False, env="PAUSE_NEW_FOLLOWS")
+    MAINTENANCE_MODE: bool = Field(False, env="MAINTENANCE_MODE")
+
+    # Health & diagnostics
+    HEALTH_PORT: int = Field(8080, env="HEALTH_PORT")
+
+    model_config = SettingsConfigDict(env_file=".env", case_sensitive=False)
+
+    # ------------------------------------------------------------------
+    # Validators / helpers
+
+    @field_validator("DEBUG", mode="before")
+    def _normalize_debug(cls, value: object) -> bool:
+        # Accept only explicit booleans or 'true'/'false'; ignore other truthy strings
+        # In pytest, default to False unless DEBUG explicitly set in env
+        if os.getenv("PYTEST_CURRENT_TEST") and "DEBUG" not in os.environ:
+            return False
+        if isinstance(value, bool):
+            # If pytest and DEBUG not set, force False even if prior global leaked True
+            if os.getenv("PYTEST_CURRENT_TEST") and "DEBUG" not in os.environ:
+                return False
+            return value
+        if value is None:
+            return False
+        s = str(value).strip().lower()
+        if s in {"true", "false"}:
+            return s == "true"
+        return False
+
+    @field_validator("DATABASE_URL", mode="before")
+    def _ensure_async_sqlalchemy_url(cls, value: str) -> str:
+        """Force async driver for sqlite URLs so SQLAlchemy async works."""
+        if value and value.startswith("sqlite:///") and "+aiosqlite" not in value:
+            return value.replace("sqlite:///", "sqlite+aiosqlite:///")
+        return value
+
+    @field_validator("ADMIN_USER_IDS", "SUPER_ADMIN_IDS", mode="before")
+    def _parse_int_list(cls, value):
+        if not value:
             return []
-        
+        # Accept JSON array, Python list, or CSV string; invalid -> []
         try:
-            return [int(uid.strip()) for uid in admin_ids_str.split(',') if uid.strip()]
-        except ValueError:
+            if isinstance(value, list):
+                return [int(v) for v in value]
+            s = str(value).strip()
+            # Try JSON array first
+            if s.startswith("[") and s.endswith("]"):
+                import json
+                arr = json.loads(s)
+                return [int(v) for v in arr]
+            # Fallback to CSV (strict: any non-digit token => empty list)
+            parts = [p.strip() for p in s.split(",") if p.strip()]
+            if not parts:
+                return []
+            if any(not p.isdigit() for p in parts):
+                return []
+            return [int(p) for p in parts]
+        except Exception:
             return []
-    
-    def _parse_super_admin_user_ids(self) -> List[int]:
-        """Parse super admin user IDs from environment variable"""
-        admin_ids_str = os.getenv('SUPER_ADMIN_IDS', '')
-        if not admin_ids_str:
-            return []
-        
-        try:
-            return [int(uid.strip()) for uid in admin_ids_str.split(',') if uid.strip()]
-        except ValueError:
-            return []
-    
+
+    @field_validator("COPY_EXECUTION_MODE", mode="before")
+    def _normalise_execution_mode(cls, value: str) -> str:
+        value = (value or "DRY").upper().strip()
+        if value not in {"DRY", "LIVE"}:
+            raise ValueError("COPY_EXECUTION_MODE must be either 'DRY' or 'LIVE'")
+        return value
+
+    # ------------------------------------------------------------------
+    # Compatibility helpers (mirroring previous API)
+
     def validate(self) -> bool:
-        """Validate required configuration values by runtime mode"""
-        # Core required fields for all modes
-        core_required = [
-            'TELEGRAM_BOT_TOKEN',
-            'DATABASE_URL',
-            'BASE_RPC_URL',
-            'ENCRYPTION_KEY'
-        ]
-        
-        # Bot mode requirements
-        bot_required = core_required + ['REDIS_URL']
-        
-        # Indexer mode requirements  
-        indexer_required = core_required + ['AVANTIS_TRADING_CONTRACT']
-        
-        # SDK mode requirements
-        sdk_required = core_required + [
-            'AVANTIS_TRADING_CONTRACT',
-            'USDC_CONTRACT'
-        ]
-        
-        # Determine mode based on environment or explicit setting
-        mode = os.getenv('RUNTIME_MODE', 'BOT').upper()
-        
-        if mode == 'BOT':
-            required_fields = bot_required
-        elif mode == 'INDEXER':
-            required_fields = indexer_required
-        elif mode == 'SDK':
-            required_fields = sdk_required
+        """Validate required configuration at startup."""
+        runtime_mode = os.getenv("RUNTIME_MODE", "BOT").upper()
+
+        core_required = ["TELEGRAM_BOT_TOKEN", "DATABASE_URL", "BASE_RPC_URL", "ENCRYPTION_KEY"]
+        bot_required = core_required + ["REDIS_URL"]
+        indexer_required = core_required + ["AVANTIS_TRADING_CONTRACT"]
+        sdk_required = core_required + ["AVANTIS_TRADING_CONTRACT", "USDC_CONTRACT"]
+
+        if runtime_mode == "INDEXER":
+            required = indexer_required
+        elif runtime_mode == "SDK":
+            required = sdk_required
         else:
-            required_fields = bot_required  # Default to bot mode
-        
-        missing_fields = []
-        for field_name in required_fields:
-            value = getattr(self, field_name)
-            if not value or (isinstance(value, str) and value.strip() == ''):
-                missing_fields.append(field_name)
-        
-        if missing_fields:
-            raise ValueError(f"Missing required configuration fields for {mode} mode: {', '.join(missing_fields)}")
-        
+            required = bot_required
+
+        missing = [name for name in required if not getattr(self, name)]
+        if missing:
+            raise ValueError(
+                f"Missing required configuration fields for {runtime_mode} mode: {', '.join(missing)}"
+            )
         return True
-    
+
     def is_production(self) -> bool:
-        """Check if running in production environment"""
-        return self.ENVIRONMENT.lower() in ['production', 'prod']
-    
+        return self.ENVIRONMENT.lower() in {"production", "prod"}
+
     def is_development(self) -> bool:
-        """Check if running in development environment"""
-        return self.ENVIRONMENT.lower() in ['development', 'dev', 'local']
-    
+        return self.ENVIRONMENT.lower() in {"development", "dev", "local"}
+
     def is_dry_mode(self) -> bool:
-        """Check if running in dry mode (simulation)"""
-        return self.COPY_EXECUTION_MODE.upper() == 'DRY'
-    
+        return self.COPY_EXECUTION_MODE == "DRY"
+
     def is_live_mode(self) -> bool:
-        """Check if running in live mode (real trading)"""
-        return self.COPY_EXECUTION_MODE.upper() == 'LIVE'
-    
+        return self.COPY_EXECUTION_MODE == "LIVE"
+
     def runtime_summary(self) -> str:
-        """Get runtime configuration summary for debugging (no secrets)"""
-        return f"""
-Configuration Summary:
-- Environment: {self.ENVIRONMENT}
-- Debug: {self.DEBUG}
-- Log Level: {self.LOG_LEVEL}
-- Log JSON: {self.LOG_JSON}
-- Database: {self.DATABASE_URL.split('://')[0]}://...
-- Redis: {self.REDIS_URL.split('://')[0]}://...
-- Base RPC: {self.BASE_RPC_URL}
-- Chain ID: {self.BASE_CHAIN_ID}
-- Trading Contract: {self.AVANTIS_TRADING_CONTRACT[:10] + '...' if self.AVANTIS_TRADING_CONTRACT else 'Not set'}
-- USDC Contract: {self.USDC_CONTRACT}
-- Copy Mode: {self.COPY_EXECUTION_MODE}
-- Emergency Stop: {self.EMERGENCY_STOP}
-- Admin Users: {len(self.ADMIN_USER_IDS)} configured
-- Indexer Backfill: {self.INDEXER_BACKFILL_RANGE} blocks
-- Leader Min Trades: {self.LEADER_MIN_TRADES_30D}
-- Leader Min Volume: ${self.LEADER_MIN_VOLUME_30D_USD:,}
-        """.strip()
+        """Return a redacted runtime summary safe for logging."""
+        # Normalize schemes for backwards-compatible display
+        db_url = self.DATABASE_URL or ""
+        if db_url.startswith("sqlite+"):
+            db_display = "sqlite://..."
+        else:
+            db_display = f"{db_url.split(':', 1)[0]}://..." if ":" in db_url else db_url
+
+        redis_url = self.REDIS_URL or ""
+        redis_display = f"{redis_url.split(':', 1)[0]}://..." if ":" in redis_url else redis_url
+
+        contract_preview = (
+            f"{self.AVANTIS_TRADING_CONTRACT[:12]}..."
+            if self.AVANTIS_TRADING_CONTRACT
+            else "Not set"
+        )
+
+        return (
+            "Configuration Summary:\n"
+            f"- Environment: {self.ENVIRONMENT}\n"
+            f"- Debug: {self.DEBUG}\n"
+            f"- Log Level: {self.LOG_LEVEL}\n"
+            f"- Database: {db_display}\n"
+            f"- Redis: {redis_display}\n"
+            f"- Base RPC: {self.BASE_RPC_URL}\n"
+            f"- Trading Contract: {contract_preview}\n"
+            f"- Copy Mode: {self.COPY_EXECUTION_MODE}\n"
+            f"- Emergency Stop: {self.EMERGENCY_STOP}\n"
+            f"- Leader Min Trades: {self.LEADER_MIN_TRADES_30D}\n"
+            f"- Leader Min Volume: ${int(self.LEADER_MIN_VOLUME_30D_USD):,}"
+        )
 
 
-# Global configuration instance
-settings = Config()
+@lru_cache()
+def get_settings() -> Settings:
+    """Return a cached settings instance."""
+    return Settings()
+
+
+# Singleton instances expected across the codebase
+settings: Settings = get_settings()
+config: Settings = settings  # Backwards compatibility alias
+
+
+class Config(Settings):  # legacy compatibility: behave like Settings
+    pass
+
+__all__ = ["Settings", "settings", "config", "get_settings", "Config"]

@@ -28,6 +28,8 @@ class RiskCalculator:
 
     def __init__(self, cfg: Optional[RiskEducationCfg] = None):
         self.cfg = cfg or RiskEducationCfg()
+    # Expose enum on instance/class for tests expecting calc._level.__self__.RiskLevel
+    RiskLevel = RiskLevel
 
     async def analyze(
         self,
@@ -43,14 +45,15 @@ class RiskCalculator:
             raise ValueError("Position size, leverage, and account balance must be positive.")
 
         margin_required = position_size_usd / leverage
-        if margin_required > account_balance_usd:
+        if margin_required >= account_balance_usd:
             raise ValueError(f"Insufficient balance: need ${margin_required:,.2f}, have ${account_balance_usd:,.2f}")
 
         # Heuristic liquidation distance (educational; protocol may differ)
         liq_distance_pct = Decimal("1") / leverage
 
         # Scenario table (0.5%, 1%, cfg.stress_move, 5%, 10%)
-        scenarios = self._scenarios(position_size_usd, account_balance_usd)
+        # Use notional (position size times leverage) for loss scenarios
+        scenarios = self._scenarios(position_size_usd * leverage, account_balance_usd)
 
         # "Account risk %" under stress case
         stress = scenarios["stress_move"]

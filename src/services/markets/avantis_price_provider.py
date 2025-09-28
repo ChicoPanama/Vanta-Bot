@@ -9,25 +9,53 @@ import logging
 from typing import Optional, Dict, Any, Tuple
 from dataclasses import dataclass
 
-from avantis_trader_sdk import TradeInput, TradeInputOrderType, LossProtectionInfo, PairSpread
+from avantis_trader_sdk.types import (
+    TradeInput,
+    TradeInputOrderType,
+    LossProtectionInfo,
+    PairSpread,
+)
 
 from src.integrations.avantis.sdk_client import get_sdk_client
 
 logger = logging.getLogger(__name__)
 
 
-@dataclass
-class TradeQuote:
-    """Trade quote with all relevant parameters"""
-    pair_index: int
-    position_size: float
-    opening_fee_usdc: float
-    loss_protection_percent: float
-    loss_protection_amount: float
-    pair_spread: Optional[PairSpread] = None
-    price_impact_spread: Optional[float] = None
-    skew_impact_spread: Optional[float] = None
-    slippage_pct: float = 0.0
+class TradeQuote(dict):
+    """Trade quote with both dict and attribute-style access.
+
+    Designed to satisfy tests that expect either a mapping or an object with attributes.
+    """
+
+    def __init__(
+        self,
+        *,
+        pair_index: int,
+        position_size: float,
+        opening_fee_usdc: float,
+        loss_protection_percent: float,
+        loss_protection_amount: float,
+        pair_spread: Optional[PairSpread] = None,
+        price_impact_spread: Optional[float] = None,
+        skew_impact_spread: Optional[float] = None,
+        slippage_pct: float = 0.0,
+    ) -> None:
+        super().__init__(
+            pair_index=pair_index,
+            position_size=position_size,
+            opening_fee_usdc=opening_fee_usdc,
+            loss_protection_percent=loss_protection_percent,
+            loss_protection_amount=loss_protection_amount,
+            pair_spread=pair_spread,
+            price_impact_spread=price_impact_spread,
+            skew_impact_spread=skew_impact_spread,
+            slippage_pct=slippage_pct,
+        )
+        # Backward-compat alias expected by some tests
+        if price_impact_spread is not None:
+            self["impact_spread"] = price_impact_spread
+        # enable attribute access
+        self.__dict__ = self
 
 
 class AvantisPriceProvider:
@@ -182,7 +210,7 @@ class AvantisPriceProvider:
             return None
     
     async def quote_open(self, pair: str, is_long: bool, collateral_usdc: float, 
-                        leverage: float, slippage_pct: float = 0.0) -> Dict[str, Any]:
+                        leverage: float, slippage_pct: float = 0.0) -> TradeQuote:
         """
         Get a comprehensive trade quote for opening a position
         
@@ -203,17 +231,17 @@ class AvantisPriceProvider:
             # Calculate position size
             position_size = collateral_usdc * leverage
             
-            # Create trade input for parameter calculation
+            # Create trade input for parameter calculation (use zero address for tests/mocks)
             trade_input = TradeInput(
-                trader="",  # Will be filled by actual trader address
+                trader="0x0000000000000000000000000000000000000000",
                 open_price=None,  # Market order
                 pair_index=pair_index,
                 collateral_in_trade=collateral_usdc,
                 is_long=is_long,
                 leverage=leverage,
                 index=0,
-                tp=None,
-                sl=None,
+                tp=0,
+                sl=0,
                 timestamp=0
             )
             
@@ -228,16 +256,17 @@ class AvantisPriceProvider:
             price_impact_spread = await self.get_price_impact_spread(pair, is_long, position_size)
             skew_impact_spread = await self.get_skew_impact_spread(pair, is_long, position_size)
             
-            return {
-                "pair_index": pair_index,
-                "position_size": position_size,
-                "opening_fee_usdc": opening_fee_usdc,
-                "loss_protection_percent": loss_protection.loss_protection_percent,
-                "loss_protection_amount": loss_protection.loss_protection_amount,
-                "pair_spread": pair_spread,
-                "impact_spread": price_impact_spread,
-                "slippage_pct": slippage_pct
-            }
+            return TradeQuote(
+                pair_index=pair_index,
+                position_size=position_size,
+                opening_fee_usdc=opening_fee_usdc,
+                loss_protection_percent=loss_protection.loss_protection_percent,
+                loss_protection_amount=loss_protection.loss_protection_amount,
+                pair_spread=pair_spread,
+                price_impact_spread=price_impact_spread,
+                skew_impact_spread=skew_impact_spread,
+                slippage_pct=slippage_pct,
+            )
             
         except Exception as e:
             logger.error(f"❌ Error creating trade quote for {pair}: {e}")

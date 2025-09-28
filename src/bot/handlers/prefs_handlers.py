@@ -4,6 +4,9 @@ from telegram import Update
 from telegram.ext import CommandHandler, CallbackQueryHandler, ContextTypes
 from src.services.users.user_prefs import prefs_store
 from src.bot.ui.keyboards import kb
+from src.utils.logging import get_logger
+
+logger = get_logger(__name__)
 
 def _prefs_text(p):
     fav = ", ".join(p.get("ui_favorites", []))

@@ -180,7 +180,7 @@ async def execute_trade(update: Update, user_id: int) -> None:
         session = trading_sessions[user_id]
         
         # Get user from database
-        db_user = db.get_user(user_id)
+        db_user = await db.get_user(user_id)
         if not db_user:
             await update.message.reply_text("❌ User not found")
             return
@@ -210,7 +210,7 @@ async def execute_trade(update: Update, user_id: int) -> None:
         )
         
         # Save position to database
-        position = db.create_position(
+        await db.create_position(
             user_id=db_user.id,
             symbol=session['asset'],
             side=session['direction'],

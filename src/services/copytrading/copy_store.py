@@ -2,7 +2,9 @@ from __future__ import annotations
 import os, sqlite3, json, time
 from typing import Dict, Any, List, Optional, Tuple
 
-DB_PATH = os.getenv("USER_PREFS_DB", "vanta_user_prefs.db")  # reuse Phase 7 DB for simplicity
+def _db_path() -> str:
+  """Resolve DB path from environment at call time to allow test overrides."""
+  return os.getenv("USER_PREFS_DB", "vanta_user_prefs.db")
 
 DDL = """
 CREATE TABLE IF NOT EXISTS user_follow_configs (
@@ -17,7 +19,7 @@ CREATE INDEX IF NOT EXISTS idx_follow_trader ON user_follow_configs(trader_key);
 """
 
 def _conn():
-  con = sqlite3.connect(DB_PATH)
+  con = sqlite3.connect(_db_path())
   con.execute("PRAGMA journal_mode=WAL;")
   return con
 

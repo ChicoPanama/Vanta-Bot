@@ -4,13 +4,15 @@ Creates and configures the Telegram bot application with proper separation of co
 """
 
 from telegram.ext import Application, CommandHandler, CallbackQueryHandler, MessageHandler, filters, ConversationHandler
-from typing import List, Tuple
+from typing import List, Tuple, Optional
 
 from src.config.settings import settings
 from src.utils.logging import get_logger
 from src.utils.errors import handle_exception
 from src.database.operations import db
 from src.bot.handlers.registry import HandlerRegistry
+from src.bot.handlers import ai_insights_handlers
+from src.services.analytics import InsightsService
 from src.bot.middleware.user_middleware import UserMiddleware
 from src.bot.middleware.error_middleware import ErrorMiddleware
 
@@ -21,12 +23,12 @@ class BotApplication:
     """Main application class that handles bot setup and configuration"""
     
     def __init__(self):
-        self.app: Application = None
+        self.app: Optional[Application] = None
         self.handler_registry = HandlerRegistry()
         self.user_middleware = UserMiddleware()
         self.error_middleware = ErrorMiddleware()
     
-    def create_application(self) -> Application:
+    async def create_application(self) -> Application:
         """Create and configure the Telegram bot application"""
         try:
             # Validate configuration
@@ -34,7 +36,7 @@ class BotApplication:
             logger.info("Configuration validated successfully")
             
             # Create database tables
-            db.create_tables()
+            await db.create_tables()
             logger.info("Database tables created/verified")
             
             # Create application
@@ -62,6 +64,13 @@ class BotApplication:
     
     def _register_handlers(self):
         """Register all command and callback handlers"""
+        try:
+            insights_service = InsightsService()
+            ai_insights_handlers.set_insights_service(insights_service)
+            logger.info("Insights service wired for AI handlers")
+        except Exception as e:
+            logger.warning(f"Failed to initialise insights service: {e}")
+
         # Register Phase 2 handlers first (higher priority)
         try:
             from src.bot.handlers.start_handlers import register as register_start_handlers
@@ -156,7 +165,7 @@ class BotApplication:
         logger.info("All handlers registered successfully")
 
 
-def create_bot_application() -> Application:
+async def create_bot_application() -> Application:
     """Factory function to create configured bot application"""
     bot_app = BotApplication()
-    return bot_app.create_application()
+    return await bot_app.create_application()

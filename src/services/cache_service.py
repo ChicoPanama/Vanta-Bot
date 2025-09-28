@@ -7,7 +7,7 @@ import json
 from typing import Any, Optional, Union, Dict, List
 from functools import wraps
 import asyncio
-import aioredis
+import redis.asyncio as redis
 from datetime import timedelta
 
 from src.config.settings import settings
@@ -20,18 +20,18 @@ class CacheService:
     """Redis-based caching service"""
     
     def __init__(self):
-        self.redis: Optional[aioredis.Redis] = None
-        self._connection_pool: Optional[aioredis.ConnectionPool] = None
+        self.redis: Optional[redis.Redis] = None
+        self._connection_pool: Optional[redis.ConnectionPool] = None
     
     async def initialize(self) -> None:
         """Initialize Redis connection"""
         try:
-            self._connection_pool = aioredis.ConnectionPool.from_url(
+            self._connection_pool = redis.ConnectionPool.from_url(
                 settings.REDIS_URL,
                 max_connections=20,
                 retry_on_timeout=True
             )
-            self.redis = aioredis.Redis(connection_pool=self._connection_pool)
+            self.redis = redis.Redis(connection_pool=self._connection_pool)
             
             # Test connection
             await self.redis.ping()

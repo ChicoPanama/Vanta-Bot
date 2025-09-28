@@ -1,167 +1,274 @@
-"""
-Database Operations
-Database management and operations for the Vanta Bot
-"""
+"""Database operations backed by SQLAlchemy AsyncSession helpers."""
+
+from __future__ import annotations
 
 import logging
-from typing import Optional, List, Dict, Any
-from sqlalchemy import create_engine, select
-from sqlalchemy.orm import sessionmaker, Session
-from contextlib import contextmanager
+import os
+from typing import Any, Awaitable, Callable, List, Optional
 
-from .models import Base, User, Position, Order, Transaction
-from ..config.settings import config
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
+
+try:
+    from src.config.settings import settings
+except Exception:  # pragma: no cover - allows usage before settings wiring
+    settings = None
+
+from src.database import models
 
 logger = logging.getLogger(__name__)
 
+
 class DatabaseManager:
-    """Database manager for handling all database operations"""
-    
-    def __init__(self):
-        try:
-            self.engine = create_engine(config.DATABASE_URL)
-            self.SessionLocal = sessionmaker(bind=self.engine)
-        except Exception as e:
-            logger.warning(f"Database connection failed: {e}. Using in-memory SQLite for testing.")
-            # Fallback to SQLite for testing
-            self.engine = create_engine("sqlite:///:memory:")
-            self.SessionLocal = sessionmaker(bind=self.engine)
-        
-    def create_tables(self):
-        Base.metadata.create_all(bind=self.engine)
-        
-    def get_session(self) -> Session:
-        return self.SessionLocal()
-        
-    def create_user(self, telegram_id: int, username: str = None, 
-                   wallet_address: str = None, encrypted_private_key: str = None):
-        session = self.get_session()
-        try:
-            user = User(
+    """Thin wrapper around SQLAlchemy async engine providing helpers."""
+
+    def __init__(self, database_url: Optional[str] = None) -> None:
+        env_value = os.getenv("DATABASE_URL")
+        fallback = "sqlite+aiosqlite:///vanta_bot.db"
+
+        if database_url:
+            url = database_url
+        elif env_value:
+            url = env_value
+        elif settings is not None and getattr(settings, "DATABASE_URL", None):
+            url = settings.DATABASE_URL
+        else:
+            url = fallback
+
+        if url.startswith("sqlite:///") and "+aiosqlite" not in url:
+            url = url.replace("sqlite:///", "sqlite+aiosqlite:///")
+
+        logger.debug("DatabaseManager initialised with %s backend", url.split(":", 1)[0])
+
+        self.engine = create_async_engine(url, pool_pre_ping=True, future=True)
+        self.session_factory = async_sessionmaker(bind=self.engine, expire_on_commit=False)
+
+    async def _run(
+        self,
+        operation: Callable[[AsyncSession], Awaitable[Any]],
+        *,
+        commit: bool = False,
+    ) -> Any:
+        async with self.session_factory() as session:
+            try:
+                result = await operation(session)
+                if commit:
+                    await session.commit()
+                return result
+            except Exception:  # noqa: BLE001
+                if commit:
+                    await session.rollback()
+                raise
+
+    # ------------------------------------------------------------------
+    # Schema management
+
+    async def create_tables(self) -> None:
+        async with self.engine.begin() as conn:
+            await conn.run_sync(models.Base.metadata.create_all)
+
+    # ------------------------------------------------------------------
+    # Users
+
+    async def get_user(self, telegram_id: int) -> Optional[models.User]:
+        async def op(session: AsyncSession) -> Optional[models.User]:
+            result = await session.execute(
+                select(models.User).where(models.User.telegram_id == telegram_id)
+            )
+            return result.scalars().first()
+
+        return await self._run(op)
+
+    async def get_user_by_id(self, user_id: int) -> Optional[models.User]:
+        async def op(session: AsyncSession) -> Optional[models.User]:
+            result = await session.execute(select(models.User).where(models.User.id == user_id))
+            return result.scalars().first()
+
+        return await self._run(op)
+
+    async def create_user(
+        self,
+        *,
+        telegram_id: int,
+        username: Optional[str],
+        wallet_address: str,
+        encrypted_private_key: str,
+    ) -> models.User:
+        async def op(session: AsyncSession) -> models.User:
+            user = models.User(
                 telegram_id=telegram_id,
                 username=username,
                 wallet_address=wallet_address,
-                encrypted_private_key=encrypted_private_key
+                encrypted_private_key=encrypted_private_key,
             )
             session.add(user)
-            session.commit()
+            await session.flush()
+            await session.refresh(user)
             return user
-        except Exception as e:
-            session.rollback()
-            logger.error(f"Error creating user: {e}")
-            return None
-        finally:
-            session.close()
-            
-    def get_user(self, telegram_id: int):
-        session = self.get_session()
-        try:
-            user = session.query(User).filter(User.telegram_id == telegram_id).first()
-            return user
-        finally:
-            session.close()
-            
-    def get_user_by_id(self, user_id: int):
-        session = self.get_session()
-        try:
-            user = session.query(User).filter(User.id == user_id).first()
-            return user
-        finally:
-            session.close()
-            
-    def create_position(self, user_id: int, symbol: str, side: str, 
-                       size: float, leverage: int, entry_price: float = None):
-        session = self.get_session()
-        try:
-            position = Position(
+
+        return await self._run(op, commit=True)
+
+    # ------------------------------------------------------------------
+    # Positions
+
+    async def create_position(
+        self,
+        *,
+        user_id: int,
+        symbol: str,
+        side: str,
+        size: float,
+        leverage: int,
+        entry_price: Optional[float] = None,
+    ) -> models.Position:
+        async def op(session: AsyncSession) -> models.Position:
+            position = models.Position(
                 user_id=user_id,
                 symbol=symbol,
                 side=side,
                 size=size,
                 leverage=leverage,
-                entry_price=entry_price
+                entry_price=entry_price,
             )
             session.add(position)
-            session.commit()
+            await session.flush()
+            await session.refresh(position)
             return position
-        except Exception as e:
-            session.rollback()
-            logger.error(f"Error creating position: {e}")
-            return None
-        finally:
-            session.close()
-            
-    def get_user_positions(self, user_id: int, status: str = 'OPEN'):
-        session = self.get_session()
-        try:
-            positions = session.query(Position).filter(
-                Position.user_id == user_id,
-                Position.status == status
-            ).all()
-            return positions
-        finally:
-            session.close()
-            
-    def update_position(self, position_id: int, **kwargs):
-        session = self.get_session()
-        try:
-            position = session.query(Position).filter(Position.id == position_id).first()
-            if position:
-                for key, value in kwargs.items():
-                    setattr(position, key, value)
-                session.commit()
-                return position
-            return None
-        except Exception as e:
-            session.rollback()
-            logger.error(f"Error updating position: {e}")
-            return None
-        finally:
-            session.close()
-            
-    def create_order(self, user_id: int, symbol: str, order_type: str, side: str,
-                    size: float, leverage: int, price: float = None):
-        session = self.get_session()
-        try:
-            order = Order(
+
+        return await self._run(op, commit=True)
+
+    async def get_user_positions(self, user_id: int, status: Optional[str] = None) -> List[models.Position]:
+        async def op(session: AsyncSession) -> List[models.Position]:
+            stmt = select(models.Position).where(models.Position.user_id == user_id)
+            if status:
+                stmt = stmt.where(models.Position.status == status)
+            result = await session.execute(stmt.order_by(models.Position.opened_at.desc()))
+            return list(result.scalars().all())
+
+        return await self._run(op)
+
+    async def get_position_by_id(self, position_id: int) -> Optional[models.Position]:
+        async def op(session: AsyncSession) -> Optional[models.Position]:
+            result = await session.execute(
+                select(models.Position).where(models.Position.id == position_id)
+            )
+            return result.scalars().first()
+
+        return await self._run(op)
+
+    async def update_position(self, position_id: int, **kwargs: Any) -> Optional[models.Position]:
+        async def op(session: AsyncSession) -> Optional[models.Position]:
+            position = await session.get(models.Position, position_id)
+            if not position:
+                return None
+            for key, value in kwargs.items():
+                setattr(position, key, value)
+            await session.flush()
+            await session.refresh(position)
+            return position
+
+        return await self._run(op, commit=True)
+
+    async def list_recent_closed_positions(self, user_id: int, limit: int = 10) -> List[models.Position]:
+        async def op(session: AsyncSession) -> List[models.Position]:
+            stmt = (
+                select(models.Position)
+                .where(models.Position.user_id == user_id, models.Position.status == "CLOSED")
+                .order_by(models.Position.closed_at.desc())
+                .limit(limit)
+            )
+            result = await session.execute(stmt)
+            return list(result.scalars().all())
+
+        return await self._run(op)
+
+    async def list_open_positions(self) -> List[models.Position]:
+        async def op(session: AsyncSession) -> List[models.Position]:
+            result = await session.execute(
+                select(models.Position).where(models.Position.status == "OPEN")
+            )
+            return list(result.scalars().all())
+
+        return await self._run(op)
+
+    # ------------------------------------------------------------------
+    # Orders
+
+    async def list_pending_orders(self, user_id: int) -> List[models.Order]:
+        async def op(session: AsyncSession) -> List[models.Order]:
+            result = await session.execute(
+                select(models.Order).where(
+                    models.Order.user_id == user_id,
+                    models.Order.status == "PENDING",
+                )
+            )
+            return list(result.scalars().all())
+
+        return await self._run(op)
+
+    async def create_order(
+        self,
+        *,
+        user_id: int,
+        symbol: str,
+        order_type: str,
+        side: str,
+        size: float,
+        leverage: int,
+        price: Optional[float] = None,
+    ) -> models.Order:
+        async def op(session: AsyncSession) -> models.Order:
+            order = models.Order(
                 user_id=user_id,
                 symbol=symbol,
                 order_type=order_type,
                 side=side,
                 size=size,
                 leverage=leverage,
-                price=price
+                price=price,
             )
             session.add(order)
-            session.commit()
+            await session.flush()
+            await session.refresh(order)
             return order
-        except Exception as e:
-            session.rollback()
-            logger.error(f"Error creating order: {e}")
-            return None
-        finally:
-            session.close()
-            
-    def create_transaction(self, user_id: int, tx_hash: str, tx_type: str,
-                          amount: float = None, status: str = 'PENDING'):
-        session = self.get_session()
-        try:
-            transaction = Transaction(
+
+        return await self._run(op, commit=True)
+
+    # ------------------------------------------------------------------
+    # Transactions
+
+    async def create_transaction(
+        self,
+        *,
+        user_id: int,
+        tx_hash: str,
+        tx_type: str,
+        amount: Optional[float] = None,
+        status: str = "PENDING",
+    ) -> models.Transaction:
+        async def op(session: AsyncSession) -> models.Transaction:
+            tx = models.Transaction(
                 user_id=user_id,
                 tx_hash=tx_hash,
                 tx_type=tx_type,
                 amount=amount,
-                status=status
+                status=status,
             )
-            session.add(transaction)
-            session.commit()
-            return transaction
-        except Exception as e:
-            session.rollback()
-            logger.error(f"Error creating transaction: {e}")
-            return None
-        finally:
-            session.close()
+            session.add(tx)
+            await session.flush()
+            await session.refresh(tx)
+            return tx
 
-# Global instance
+        return await self._run(op, commit=True)
+
+    async def run_in_session(
+        self,
+        operation: Callable[[AsyncSession], Awaitable[Any]],
+        *,
+        commit: bool = False,
+    ) -> Any:
+        """Execute a custom operation with an async session."""
+        return await self._run(operation, commit=commit)
+
+
 db = DatabaseManager()

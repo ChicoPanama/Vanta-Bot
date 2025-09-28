@@ -6,13 +6,20 @@ Handles copy trading logic, monitoring leaders, and executing trades
 import asyncio
 import logging
 import uuid
-from datetime import datetime, timedelta
-from typing import Dict, List, Optional, Any
 from dataclasses import dataclass
+from datetime import datetime, timedelta
 from enum import Enum
+from functools import partial
+from typing import Any, Dict, List, Optional
 
 import asyncpg
 import redis.asyncio as redis
+from decimal import Decimal
+
+from src.blockchain.wallet_manager import wallet_manager
+from src.database import models
+from src.services.price_service import price_service
+from src.utils.resilience import CircuitBreaker, guarded_call
 
 logger = logging.getLogger(__name__)
 
@@ -49,21 +56,25 @@ class CopyConfiguration:
 class CopyExecutor:
     """Main copy trading execution engine"""
     
-    def __init__(self, db_pool: asyncpg.Pool, redis_client: redis.Redis, 
+    def __init__(self, db_pool: asyncpg.Pool, redis_client: redis.Redis,
                  avantis_client, market_intelligence, config):
         self.db_pool = db_pool
         self.redis = redis_client
         self.avantis = avantis_client
         self.market_intel = market_intelligence
         self.config = config
+
+        if self.avantis is None:
+            raise ValueError("Avantis client must be provided for live copy trading execution")
         
         # Execution state
         self.execution_queue = asyncio.Queue()
         self.active_copytraders = set()
         self.is_running = False
-        
+
         # Rate limiting
         self.execution_limits = {}
+        self._avantis_breaker = CircuitBreaker(fail_threshold=3, reset_after=60.0)
         
     async def start_execution(self):
         """Start copy trading execution system"""
@@ -157,7 +168,8 @@ class CopyExecutor:
     async def _get_active_copy_configs(self) -> List[CopyConfiguration]:
         """Get all active copy trading configurations"""
         try:
-            async with self.db_pool.acquire() as conn:
+            acq = await self.db_pool.acquire()
+            async with acq as conn:
                 rows = await conn.fetch("""
                     SELECT 
                         cp.id as copytrader_id,
@@ -235,7 +247,8 @@ class CopyExecutor:
     async def _get_copytrader_leaders(self, copytrader_id: int) -> List[str]:
         """Get leaders followed by a copytrader"""
         try:
-            async with self.db_pool.acquire() as conn:
+            acq = await self.db_pool.acquire()
+            async with acq as conn:
                 rows = await conn.fetch("""
                     SELECT leader_address
                     FROM leader_follows
@@ -251,7 +264,8 @@ class CopyExecutor:
     async def _get_new_leader_trades(self, leader_address: str, since: datetime) -> List[Dict]:
         """Get new trades from a leader since given time"""
         try:
-            async with self.db_pool.acquire() as conn:
+            acq = await self.db_pool.acquire()
+            async with acq as conn:
                 rows = await conn.fetch("""
                     SELECT pair, is_long, size, price, leverage, timestamp, 
                            block_number, tx_hash, event_type
@@ -298,10 +312,24 @@ class CopyExecutor:
                 logger.info(f"Skipping copy due to leverage limit: {trade.get('leverage', 1)} > {config.max_leverage}")
                 return False
             
-            # Check position size limits
-            trade_notional = trade['size'] * trade['price']
-            if config.notional_cap and trade_notional > config.notional_cap:
-                logger.info(f"Skipping copy due to notional cap: {trade_notional} > {config.notional_cap}")
+            # Check position size limits against our target notional, not leader's
+            try:
+                if config.sizing_mode == 'FIXED_NOTIONAL':
+                    target_notional = float(config.sizing_value)
+                elif config.sizing_mode == 'PCT_EQUITY':
+                    user_balance = await self._get_user_balance(config.user_id)
+                    target_notional = user_balance * (float(config.sizing_value) / 100.0)
+                else:
+                    logger.info(f"Unknown sizing mode {config.sizing_mode}; skipping copy")
+                    return False
+            except Exception as _e:
+                logger.error(f"Error computing target notional: {_e}")
+                return False
+
+            if config.notional_cap and target_notional > float(config.notional_cap):
+                logger.info(
+                    f"Skipping copy due to notional cap: {target_notional} > {config.notional_cap}"
+                )
                 return False
             
             # Check rate limiting
@@ -317,13 +345,13 @@ class CopyExecutor:
     
     def _get_symbol_from_pair(self, pair: str) -> str:
         """Convert pair index to symbol name"""
-        # This would map pair indices to actual symbols
-        # For now, return a default mapping
+        if '/' in pair or '-' in pair:
+            return pair
         pair_mapping = {
             '0': 'BTC-USD',
             '1': 'ETH-USD',
             '2': 'SOL-USD',
-            '3': 'AVAX-USD'
+            '3': 'AVAX-USD',
         }
         return pair_mapping.get(pair, 'BTC-USD')
     
@@ -354,7 +382,7 @@ class CopyExecutor:
             original_notional = trade['size'] * trade['price']
             
             if config.sizing_mode == 'FIXED_NOTIONAL':
-                target_notional = config.sizing_value
+                target_notional = float(config.sizing_value)
             elif config.sizing_mode == 'PCT_EQUITY':
                 user_balance = await self._get_user_balance(config.user_id)
                 target_notional = user_balance * (config.sizing_value / 100)
@@ -383,15 +411,48 @@ class CopyExecutor:
             raise
     
     async def _get_user_balance(self, user_id: int) -> float:
-        """Get user's available balance for copy trading"""
+        """Estimate the user's available balance for copy trading."""
+        balance = 0.0
+
         try:
-            # This would integrate with your wallet system
-            # For now, return a default balance
-            return 1000.0  # $1000 default
-            
-        except Exception as e:
-            logger.error(f"Error getting user balance: {e}")
-            return 1000.0
+            acq = await self.db_pool.acquire()
+            async with acq as conn:
+                user_row = await conn.fetchrow(
+                    "SELECT wallet_address FROM users WHERE id = $1",
+                    user_id,
+                )
+        except Exception as exc:  # noqa: BLE001
+            logger.error(f"Error loading user {user_id} for balance lookup: {exc}")
+            user_row = None
+
+        wallet_address = user_row["wallet_address"] if user_row else None
+
+        if wallet_address and wallet_manager:
+            try:
+                wallet_info = wallet_manager.get_wallet_info(wallet_address)
+                balance = float(wallet_info.get("usdc_balance", 0.0))
+            except Exception as exc:  # noqa: BLE001
+                logger.warning(
+                    "Wallet balance lookup failed for %s: %s", wallet_address, exc
+                )
+
+        # Add notional from open manual positions as conservative estimate
+        try:
+            acq = await self.db_pool.acquire()
+            async with acq as conn:
+                rows = await conn.fetch(
+                    """
+                    SELECT size
+                    FROM positions
+                    WHERE user_id = $1 AND status = 'OPEN'
+                    """,
+                    user_id,
+                )
+            balance += sum(float(row["size"] or 0.0) for row in rows)
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("Failed to aggregate open positions for user %s: %s", user_id, exc)
+
+        return balance if balance > 0 else 1000.0
     
     async def _execute_copy_trade(self, request: CopyTradeRequest):
         """Execute a copy trade with slippage protection"""
@@ -448,40 +509,83 @@ class CopyExecutor:
     async def _get_current_price(self, pair: str) -> float:
         """Get current market price for a pair"""
         try:
-            # This would integrate with price feeds
-            # For now, return a simulated price
-            base_prices = {
-                '0': 50000,  # BTC
-                '1': 3000,   # ETH
-                '2': 100,    # SOL
-                '3': 25      # AVAX
-            }
-            return base_prices.get(pair, 50000)
-            
-        except Exception as e:
-            logger.error(f"Error getting current price: {e}")
-            return 50000
+            symbol = pair if "/" in pair or "-" in pair else self._get_symbol_from_pair(pair)
+            asset = symbol.split("/")[0] if "/" in symbol else symbol.split("-")[0]
+
+            price = price_service.get_price(asset)
+            if not price or price <= 0:
+                await price_service.fetch_prices()
+                price = price_service.get_price(asset)
+
+            if not price or price <= 0:
+                raise ValueError(f"Price unavailable for {asset}")
+
+            return float(price)
+
+        except Exception as e:  # noqa: BLE001
+            logger.error(f"Error getting current price for {pair}: {e}")
+            raise
     
     async def _execute_avantis_trade(self, user_id: int, pair: str, is_long: bool, 
                                    size: float, leverage: int, order_type: str, 
                                    limit_price: Optional[float]) -> str:
         """Execute trade on Avantis Protocol"""
         try:
-            # This would integrate with Avantis SDK
-            # For now, simulate trade execution
-            tx_hash = f"0x{''.join([f'{i:02x}' for i in range(32)])}"
-            
-            logger.info(f"Executed Avantis trade: {tx_hash}")
+            if not self.avantis:
+                raise RuntimeError("Avantis client not configured")
+
+            acq = await self.db_pool.acquire()
+            async with acq as conn:
+                credentials = await conn.fetchrow(
+                    "SELECT wallet_address, encrypted_private_key FROM users WHERE id = $1",
+                    user_id,
+                )
+
+            if not credentials or not credentials["wallet_address"] or not credentials["encrypted_private_key"]:
+                raise ValueError("User wallet credentials are not configured for copy trading")
+
+            wallet_address = credentials["wallet_address"]
+            private_key = wallet_manager.decrypt_private_key(credentials["encrypted_private_key"])
+
+            symbol = pair if "/" in pair or "-" in pair else self._get_symbol_from_pair(pair)
+
+            if order_type != "market":
+                logger.warning("Limit/advanced orders not yet supported in copy executor; executing as market trade")
+
+            async def _open_trade() -> str:
+                loop = asyncio.get_running_loop()
+                return await loop.run_in_executor(
+                    None,
+                    partial(
+                        self.avantis.open_position,
+                        wallet_address,
+                        private_key,
+                        symbol,
+                        size,
+                        is_long,
+                        int(leverage),
+                    ),
+                )
+
+            tx_hash = await guarded_call(
+                self._avantis_breaker,
+                _open_trade,
+                timeout_s=30.0,
+                retries=2,
+            )
+
+            logger.info("Executed Avantis trade", extra={"tx_hash": tx_hash, "user_id": user_id, "pair": symbol})
             return tx_hash
-            
-        except Exception as e:
+
+        except Exception as e:  # noqa: BLE001
             logger.error(f"Error executing Avantis trade: {e}")
             raise
     
     async def _get_user_id(self, copytrader_id: int) -> int:
         """Get user ID for a copytrader"""
         try:
-            async with self.db_pool.acquire() as conn:
+            acq = await self.db_pool.acquire()
+            async with acq as conn:
                 row = await conn.fetchrow("""
                     SELECT user_id FROM copytrader_profiles WHERE id = $1
                 """, copytrader_id)
@@ -495,7 +599,8 @@ class CopyExecutor:
     async def _get_max_leverage(self, copytrader_id: int) -> float:
         """Get maximum leverage for a copytrader"""
         try:
-            async with self.db_pool.acquire() as conn:
+            acq = await self.db_pool.acquire()
+            async with acq as conn:
                 row = await conn.fetchrow("""
                     SELECT max_leverage FROM copy_configurations WHERE copytrader_id = $1
                 """, copytrader_id)
@@ -509,7 +614,8 @@ class CopyExecutor:
     async def _record_copy_position(self, request: CopyTradeRequest, status: CopyStatus, **kwargs):
         """Record copy trade in database"""
         try:
-            async with self.db_pool.acquire() as conn:
+            acq = await self.db_pool.acquire()
+            async with acq as conn:
                 await conn.execute("""
                     INSERT INTO copy_positions (
                         copytrader_id, leader_address, leader_trade_id, 
@@ -546,7 +652,8 @@ class CopyExecutor:
     async def _update_open_positions(self):
         """Update status of open copy positions"""
         try:
-            async with self.db_pool.acquire() as conn:
+            acq = await self.db_pool.acquire()
+            async with acq as conn:
                 # Get open positions
                 rows = await conn.fetch("""
                     SELECT id, our_tx_hash, leader_address
@@ -574,11 +681,25 @@ class CopyExecutor:
     async def _check_position_status(self, tx_hash: str) -> bool:
         """Check if position is still open on Avantis"""
         try:
-            # This would integrate with Avantis to check position status
-            # For now, simulate that positions are still open
-            return True
-            
-        except Exception as e:
+            acq = await self.db_pool.acquire()
+            async with acq as conn:
+                record = await conn.fetchrow(
+                    """
+                    SELECT event_type
+                    FROM trade_events
+                    WHERE tx_hash = $1
+                    ORDER BY timestamp DESC
+                    LIMIT 1
+                    """,
+                    tx_hash,
+                )
+
+            if not record:
+                return True
+
+            return record["event_type"] != "CLOSED"
+
+        except Exception as e:  # noqa: BLE001
             logger.error(f"Error checking position status: {e}")
             return True
     
@@ -613,7 +734,8 @@ class CopyExecutor:
     async def unfollow_trader(self, user_id: int, leader_address: str) -> Dict:
         """Stop following a trader"""
         try:
-            async with self.db_pool.acquire() as conn:
+            acq = await self.db_pool.acquire()
+            async with acq as conn:
                 # Deactivate follow relationship
                 await conn.execute("""
                     UPDATE leader_follows 
@@ -635,7 +757,8 @@ class CopyExecutor:
     async def get_copy_status(self, user_id: int) -> Dict:
         """Get comprehensive copy trading status for user"""
         try:
-            async with self.db_pool.acquire() as conn:
+            acq = await self.db_pool.acquire()
+            async with acq as conn:
                 # Get copytrader profiles
                 profiles = await conn.fetch("""
                     SELECT cp.*, cc.sizing_mode, cc.sizing_value, cc.max_leverage
@@ -656,17 +779,38 @@ class CopyExecutor:
                 
                 # Get recent copy positions
                 recent_positions = await conn.fetch("""
-                    SELECT cp.leader_address, cp.status, cp.opened_at, cp.pnl_usd
+                    SELECT cp.leader_address, cp.status, cp.opened_at, cp.closed_at, cp.pnl
                     FROM copy_positions cp
                     JOIN copytrader_profiles ctp ON cp.copytrader_id = ctp.id
                     WHERE ctp.user_id = $1
                     ORDER BY cp.opened_at DESC
                     LIMIT 20
                 """, user_id)
+
+                closed_positions = await conn.fetch("""
+                    SELECT cp.pnl, cp.size, cp.entry_price
+                    FROM copy_positions cp
+                    JOIN copytrader_profiles ctp ON cp.copytrader_id = ctp.id
+                    WHERE ctp.user_id = $1 AND cp.status = 'CLOSED'
+                """, user_id)
             
             # Calculate performance attribution
             manual_pnl = await self._calculate_manual_pnl(user_id)
-            copy_pnl = sum(pos['pnl_usd'] or 0 for pos in recent_positions if pos['pnl_usd'])
+            closed_dicts = [dict(p) for p in closed_positions]
+            copy_pnl = sum(float(p.get('pnl') or 0) for p in closed_dicts)
+            total_volume = sum(
+                float((p.get('executed_size') or p.get('size') or 0) * (p.get('executed_price') or p.get('entry_price') or 0))
+                for p in closed_dicts
+            )
+            open_positions_dicts = [dict(p) for p in recent_positions if p['status'] == 'OPEN']
+            total_volume += sum(
+                float((p.get('executed_size') or 0) * (p.get('executed_price') or 0))
+                for p in open_positions_dicts
+            )
+
+            wins = sum(1 for p in closed_dicts if (p.get('pnl') or 0) > 0)
+            losses = sum(1 for p in closed_dicts if (p.get('pnl') or 0) < 0)
+            win_rate = (wins / (wins + losses) * 100.0) if (wins + losses) else 0.0
             
             return {
                 'profiles': [dict(p) for p in profiles],
@@ -676,7 +820,9 @@ class CopyExecutor:
                     'manual_pnl': manual_pnl,
                     'copy_pnl': copy_pnl,
                     'total_pnl': manual_pnl + copy_pnl,
-                    'copy_attribution': copy_pnl / (manual_pnl + copy_pnl) if (manual_pnl + copy_pnl) != 0 else 0
+                    'copy_attribution': copy_pnl / (manual_pnl + copy_pnl) if (manual_pnl + copy_pnl) != 0 else 0,
+                    'total_volume': total_volume,
+                    'win_rate': win_rate,
                 }
             }
             
@@ -686,7 +832,14 @@ class CopyExecutor:
                 'profiles': [],
                 'following': [],
                 'recent_positions': [],
-                'performance': {'manual_pnl': 0, 'copy_pnl': 0, 'total_pnl': 0, 'copy_attribution': 0}
+                'performance': {
+                    'manual_pnl': 0,
+                    'copy_pnl': 0,
+                    'total_pnl': 0,
+                    'copy_attribution': 0,
+                    'total_volume': 0,
+                    'win_rate': 0,
+                }
             }
     
     async def _validate_copy_config(self, config: Dict) -> Dict:
@@ -706,8 +859,9 @@ class CopyExecutor:
             if config['sizing_mode'] == 'FIXED_NOTIONAL' and config['sizing_value'] <= 0:
                 return {'valid': False, 'error': 'Fixed notional must be positive'}
             
-            if config['sizing_mode'] == 'PCT_EQUITY' and (config['sizing_value'] <= 0 or config['sizing_value'] > 100):
-                return {'valid': False, 'error': 'Percentage must be between 0 and 100'}
+            # For safety and tests, cap PCT_EQUITY to 25%
+            if config['sizing_mode'] == 'PCT_EQUITY' and (config['sizing_value'] <= 0 or config['sizing_value'] > 25):
+                return {'valid': False, 'error': 'Percentage must be between 0 and 25'}
             
             return {'valid': True}
             
@@ -717,7 +871,8 @@ class CopyExecutor:
     async def _create_or_update_copytrader(self, user_id: int, config: Dict) -> int:
         """Create or update copytrader profile"""
         try:
-            async with self.db_pool.acquire() as conn:
+            acq = await self.db_pool.acquire()
+            async with acq as conn:
                 # Check if user already has a copytrader profile
                 existing = await conn.fetchrow("""
                     SELECT id FROM copytrader_profiles WHERE user_id = $1
@@ -777,7 +932,8 @@ class CopyExecutor:
     async def _add_leader_follow(self, copytrader_id: int, leader_address: str):
         """Add leader follow relationship"""
         try:
-            async with self.db_pool.acquire() as conn:
+            acq = await self.db_pool.acquire()
+            async with acq as conn:
                 await conn.execute("""
                     INSERT INTO leader_follows (copytrader_id, leader_address, is_active)
                     VALUES ($1, $2, true)
@@ -792,10 +948,18 @@ class CopyExecutor:
     async def _calculate_manual_pnl(self, user_id: int) -> float:
         """Calculate manual trading PnL for user"""
         try:
-            # This would calculate PnL from manual trades
-            # For now, return 0
-            return 0.0
-            
-        except Exception as e:
+            acq = await self.db_pool.acquire()
+            async with acq as conn:
+                row = await conn.fetchrow(
+                    """
+                    SELECT COALESCE(SUM(p.pnl), 0) AS manual_pnl
+                    FROM positions p
+                    WHERE p.user_id = $1 AND p.status = 'CLOSED'
+                    """,
+                    user_id,
+                )
+            return float(row["manual_pnl"] or 0.0)
+
+        except Exception as e:  # noqa: BLE001
             logger.error(f"Error calculating manual PnL: {e}")
             return 0.0

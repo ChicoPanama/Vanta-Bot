@@ -20,14 +20,17 @@ async def portfolio_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) 
     
     try:
         # Get user statistics
-        stats = analytics.get_user_stats(db_user.id)
-        
+        stats = await analytics.get_user_stats(db_user.id)
+
         # Get current positions
-        positions = db.get_user_positions(db_user.id, 'OPEN')
+        positions = await db.get_user_positions(db_user.id, 'OPEN')
         
         # Calculate portfolio value
-        total_open_pnl = sum(pos.pnl for pos in positions)
+        total_open_pnl = sum(pos.pnl or 0 for pos in positions)
         
+        best_trade = max((pos.pnl or 0) for pos in positions) if positions else 0
+        worst_trade = min((pos.pnl or 0) for pos in positions) if positions else 0
+
         portfolio_text = f"""
 🏦 **Portfolio Analytics**
 
@@ -42,8 +45,8 @@ async def portfolio_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) 
 • Unrealized PnL: ${total_open_pnl:,.2f}
 
 💰 **Performance:**
-• Best Trade: ${max([pos.pnl for pos in positions], default=0):,.2f}
-• Worst Trade: ${min([pos.pnl for pos in positions], default=0):,.2f}
+• Best Trade: ${best_trade:,.2f}
+• Worst Trade: ${worst_trade:,.2f}
         """
         
         if update.callback_query:
@@ -67,4 +70,3 @@ async def portfolio_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) 
             await update.callback_query.answer(error_msg)
         else:
             await update.message.reply_text(error_msg)
-

@@ -1,51 +1,42 @@
 # src/bot/handlers/copy_trading_commands.py
 from __future__ import annotations
-from typing import Optional, List, Dict, Any
-import os
+from typing import Optional
 import logging
 
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import ContextTypes, CommandHandler
 
-# Import the services
 from src.services.analytics.position_tracker import PositionTracker
 from src.services.analytics.leaderboard_service import LeaderboardService
-from src.services.copy_trading.copy_executor import CopyExecutor, CopyConfig
-from decimal import Decimal
+from src.services.copytrading import copy_service
 
 logger = logging.getLogger(__name__)
 
 # Simple in-process singleton registry (replace with DI in your app bootstrap)
 _position_tracker: Optional[PositionTracker] = None
 _leaderboard_service: Optional[LeaderboardService] = None
-_copy_executor: Optional[CopyExecutor] = None
+
 
 def set_position_tracker(tracker: PositionTracker) -> None:
     """Set the position tracker instance"""
     global _position_tracker
     _position_tracker = tracker
 
+
 def set_leaderboard_service(service: LeaderboardService) -> None:
     """Set the leaderboard service instance"""
     global _leaderboard_service
     _leaderboard_service = service
 
-def set_copy_executor(executor: CopyExecutor) -> None:
-    """Set the copy executor instance"""
-    global _copy_executor
-    _copy_executor = executor
 
 def get_position_tracker() -> Optional[PositionTracker]:
     """Get the position tracker instance"""
     return _position_tracker
 
+
 def get_leaderboard_service() -> Optional[LeaderboardService]:
     """Get the leaderboard service instance"""
     return _leaderboard_service
-
-def get_copy_executor() -> Optional[CopyExecutor]:
-    """Get the copy executor instance"""
-    return _copy_executor
 
 async def cmd_alfa(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """
@@ -190,43 +181,37 @@ async def cmd_follow(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
         except Exception as e:
             logger.warning(f"Error checking leader stats: {e}")
     
-    # Use copy executor to follow the leader
-    copy_executor = get_copy_executor()
-    if not copy_executor:
-        await update.message.reply_text(
-            "⚠️ Copy executor not initialized. Please try again later.",
-            parse_mode='Markdown'
-        )
-        return
+    user_id = update.effective_user.id
 
-    # Create copy configuration
-    copy_config = CopyConfig(
-        sizing_mode="FIXED_NOTIONAL",
-        sizing_value=Decimal(str(max_size)),
-        max_slippage_bps=200,  # 2% max slippage
-        max_leverage=Decimal("100"),  # Max 100x leverage
-        notional_cap=Decimal(str(max_size * 2)),  # Cap at 2x the size
-        pair_filters=None  # No pair restrictions for now
-    )
+    cfg = copy_service.get_cfg(user_id, leader_address)
+    cfg["notify"] = True
+    cfg["auto_copy"] = True
+    cfg["sizing_mode"] = "FIXED_USD"
+    cfg["fixed_usd"] = float(max_size)
+    cfg["per_trade_cap_usd"] = float(max_size)
+    cfg["daily_cap_usd"] = float(max_size) * 5
 
-    # Follow the leader
-    success = await copy_executor.follow(user_id, leader_address, copy_config)
-    
-    if success:
+    risk_caps = {"low": 5, "medium": 20, "high": 50}
+    cfg["max_leverage"] = risk_caps.get(risk_level, cfg.get("max_leverage", 20))
+
+    copy_service.set_cfg(user_id, leader_address, cfg)
+
+    if copy_service.executor_available():
         await update.message.reply_text(
             f"✅ **Following Trader**\n\n"
             f"🎯 Leader: `{leader_address}`\n"
             f"💰 Max Size: ${max_size:,.0f}\n"
-            f"⚠️ Risk: {risk_level.title()}\n\n"
-            f"🚀 Copy trading will begin automatically when the leader makes trades.\n"
-            f"Use `/status` to monitor your copy performance.",
+            f"⚠️ Risk: {risk_level.title()}\n"
+            f"🤖 Auto-copy: Enabled\n\n"
+            f"Copy trades will mirror this leader as signals arrive.\n"
+            f"Use `/status` to monitor live performance.",
             parse_mode='Markdown'
         )
     else:
         await update.message.reply_text(
-            f"❌ **Failed to Follow Trader**\n\n"
-            f"Could not start following `{leader_address}`.\n"
-            f"Please try again later.",
+            f"⚠️ **Configuration Saved**\n\n"
+            f"Leader `{leader_address}` added with max size ${max_size:,.0f}.\n"
+            "Auto-copy will activate once the executor service is online.",
             parse_mode='Markdown'
         )
 
@@ -256,67 +241,114 @@ async def cmd_unfollow(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
         )
         return
     
-    # Use copy executor to unfollow the leader
-    copy_executor = get_copy_executor()
-    if not copy_executor:
+    user_id = update.effective_user.id
+    followed = {tk for tk, _ in copy_service.list_follows(user_id)}
+
+    if leader_address not in followed:
         await update.message.reply_text(
-            "⚠️ Copy executor not initialized. Please try again later.",
+            f"ℹ️ You are not following `{leader_address}`.",
             parse_mode='Markdown'
         )
         return
 
-    success = await copy_executor.unfollow(user_id, leader_address)
-    
-    if success:
-        await update.message.reply_text(
-            f"🚫 **Unfollowed Trader**\n\n"
-            f"Leader: `{leader_address}`\n\n"
-            f"✅ You will no longer copy trades from this trader.\n"
-            f"Any open copied positions will remain open.",
-            parse_mode='Markdown'
-        )
-    else:
-        await update.message.reply_text(
-            f"❌ **Failed to Unfollow**\n\n"
-            f"Could not unfollow `{leader_address}`.\n"
-            f"You may not be following this trader.",
-            parse_mode='Markdown'
-        )
+    copy_service.unfollow(user_id, leader_address)
+
+    await update.message.reply_text(
+        f"🚫 **Unfollowed Trader**\n\n"
+        f"Leader: `{leader_address}`\n\n"
+        f"✅ You will no longer copy trades from this trader.\n"
+        f"Any open copied positions will remain open.",
+        parse_mode='Markdown'
+    )
 
 async def cmd_status(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """
     /status - Show copy trading status and performance
     """
-    # Get copy executor to get real status
-    copy_executor = get_copy_executor()
-    if not copy_executor:
+    user_id = update.effective_user.id
+    follows = copy_service.list_follows(user_id)
+
+    if not follows:
         await update.message.reply_text(
-            "⚠️ Copy executor not initialized. Please try again later.",
+            "📊 **Copy Trading Status**\n\n"
+            "You are not following any traders yet. Use `/follow <address>` to begin.",
+            parse_mode='Markdown'
+        )
+        return
+
+    if not copy_service.executor_available():
+        await update.message.reply_text(
+            "⚠️ Copy executor is offline. Configurations are saved, but live metrics are unavailable.",
             parse_mode='Markdown'
         )
         return
 
     try:
-        status_data = await copy_executor.status(user_id)
-        
-        await update.message.reply_text(
-            f"📊 **Copy Trading Status**\n\n"
-            f"🤝 **Active Leaders:** {status_data['leaders']}\n"
-            f"📈 **Open Copied Positions:** {status_data['open_positions']}\n"
-            f"💰 **30D Copy P&L:** ${status_data['copy_pnl_30d']}\n"
-            f"🎯 **Total Copy Volume:** ${status_data['total_volume']:.2f}\n"
-            f"📊 **Win Rate:** {status_data['win_rate']:.1f}%\n\n"
-            f"💡 Use `/follow <address>` to start copying a trader from the leaderboard.\n"
-            f"Use `/alfa top50` to see available traders.",
-            parse_mode='Markdown'
-        )
-        
-    except Exception as e:
-        logger.error(f"Error getting copy status: {e}")
+        status_bundle = await copy_service.get_status(user_id)
+    except Exception as exc:  # noqa: BLE001
+        logger.error(f"Error getting copy status: {exc}")
         await update.message.reply_text(
             "❌ Error retrieving copy trading status. Please try again later.",
             parse_mode='Markdown'
         )
+        return
+
+    aggregate = status_bundle.get("aggregate") if status_bundle else None
+    if not aggregate:
+        await update.message.reply_text(
+            "⚠️ No execution data available yet. Try again after the next copied trade.",
+            parse_mode='Markdown'
+        )
+        return
+
+    leaders = len(follows)
+    active_copies = aggregate.get("active_copies", 0)
+    pnl_30d = aggregate.get("pnl_30d")
+    if pnl_30d is None:
+        pnl_30d = aggregate.get("total_pnl", 0.0)
+    volume_30d = aggregate.get("volume_30d")
+    if volume_30d is None:
+        volume_30d = aggregate.get("total_volume", 0.0)
+    win_rate_30d = aggregate.get("win_rate_30d")
+    if win_rate_30d is None:
+        win_rate_30d = aggregate.get("win_rate", 0.0)
+    last_copy = aggregate.get("last_copy_at")
+
+    message_lines = [
+        "📊 **Copy Trading Status**",
+        "",
+        f"🤝 **Active Leaders:** {leaders}",
+        f"📈 **Open Copied Positions:** {active_copies}",
+        f"💰 **30D Copy P&L:** ${pnl_30d:,.2f}",
+        f"🎯 **30D Volume:** ${volume_30d:,.2f}",
+        f"📊 **30D Win Rate:** {win_rate_30d:.1f}%",
+    ]
+
+    if last_copy:
+        message_lines.append(f"🕒 **Last Copy:** {last_copy}")
+
+    leader_stats = status_bundle.get("follows", [])
+    if leader_stats:
+        message_lines.append("")
+        message_lines.append("**Leaders:**")
+        for entry in leader_stats[:5]:
+            status = entry.get("status", {})
+            if not status.get("ok"):
+                continue
+            pnl = status.get("pnl_30d")
+            if pnl is None:
+                pnl = status.get("total_pnl", 0.0)
+            win_rate = status.get("win_rate_30d")
+            if win_rate is None:
+                win_rate = status.get("win_rate", 0.0)
+            message_lines.append(
+                f"• `{entry['trader_key']}` — P&L ${pnl:,.2f}, Win rate {win_rate:.1f}%"
+            )
+
+    message_lines.append("")
+    message_lines.append("💡 Use `/alfa top50` to discover verified leaders.")
+
+    await update.message.reply_text("\n".join(message_lines), parse_mode='Markdown')
 
 # Callback handlers for inline buttons
 async def alfa_refresh_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):

@@ -93,7 +93,8 @@ class PositionTracker:
     async def _get_active_traders(self, since: datetime) -> List[str]:
         """Get list of traders with activity since given time"""
         try:
-            async with self.db_pool.acquire() as conn:
+            acq = await self.db_pool.acquire()
+            async with acq as conn:
                 rows = await conn.fetch("""
                     SELECT DISTINCT address
                     FROM trade_events
@@ -157,7 +158,8 @@ class PositionTracker:
     async def _get_trader_trades(self, address: str, since: datetime) -> List[Dict]:
         """Get trades for a trader since given time"""
         try:
-            async with self.db_pool.acquire() as conn:
+            acq = await self.db_pool.acquire()
+            async with acq as conn:
                 rows = await conn.fetch("""
                     SELECT pair, is_long, size, price, leverage, event_type, 
                            timestamp, fee, block_number, tx_hash
@@ -269,7 +271,8 @@ class PositionTracker:
             await self.redis.expire(cache_key, 3600)  # Cache for 1 hour
             
             # Persist to database
-            async with self.db_pool.acquire() as conn:
+            acq = await self.db_pool.acquire()
+            async with acq as conn:
                 await conn.execute("""
                     INSERT INTO trader_stats (
                         address, window, last_30d_volume_usd, median_trade_size_usd,
@@ -322,7 +325,8 @@ class PositionTracker:
                 )
             
             # Fallback to database
-            async with self.db_pool.acquire() as conn:
+            acq = await self.db_pool.acquire()
+            async with acq as conn:
                 row = await conn.fetchrow("""
                     SELECT * FROM trader_stats
                     WHERE address = $1 AND window = $2
@@ -350,7 +354,8 @@ class PositionTracker:
     async def get_top_traders_by_volume(self, limit: int = 100) -> List[TraderStats]:
         """Get top traders by volume"""
         try:
-            async with self.db_pool.acquire() as conn:
+            acq = await self.db_pool.acquire()
+            async with acq as conn:
                 rows = await conn.fetch("""
                     SELECT * FROM trader_stats
                     WHERE window = '30d' AND last_trade_at > NOW() - INTERVAL '72 hours'
