@@ -3,7 +3,7 @@ import time
 from telegram import Update
 from telegram.ext import CommandHandler, ContextTypes
 from src.services.trading.execution_service import get_execution_service
-from src.config.settings_new import settings
+from src.config.settings import settings
 from src.services.copytrading.copy_store import all_trader_keys, users_by_trader
 from src.services.copytrading.copy_service import get_cfg, set_cfg
 import os

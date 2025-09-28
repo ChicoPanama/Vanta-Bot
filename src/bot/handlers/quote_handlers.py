@@ -7,7 +7,7 @@ from src.services.trading.trade_drafts import draft_store
 from src.services.trading.execution_service import get_execution_service, SLIPPAGE_STEPS
 from src.bot.ui.keyboards import kb
 from src.bot.ui.formatting import fmt_usd, fmt_px
-from src.config.settings_new import settings  # use your central settings module
+from src.config.settings import settings  # unified central settings
 from src.utils.ratelimit import quote_limiter
 from src.services.users.user_prefs import prefs_store
 

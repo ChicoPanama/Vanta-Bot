@@ -9,7 +9,7 @@ from decimal import Decimal
 from datetime import datetime, timezone, timedelta
 
 from src.services.trading.execution_service import get_execution_service
-from src.config.settings_new import settings
+from src.config.settings import settings
 from src.database.operations import db
 from src.database import models
 from sqlalchemy import select, func, case, and_

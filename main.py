@@ -12,7 +12,7 @@ from src.bot.application import create_bot_application
 from src.config.settings import settings
 from src.config.flags import flags
 from src.config.validate import validate_all
-from src.monitoring.health_server import HealthChecker, start_health_server
+# Health server: run FastAPI app (src/monitoring/health_server.py) via uvicorn in background
 from src.services.background import BackgroundServiceManager
 from src.services.copy_trading.execution_mode import execution_manager
 from src.utils.errors import handle_exception
@@ -21,6 +21,34 @@ from src.utils.supervisor import TaskManager
 
 setup_logging()
 logger = get_logger(__name__)
+
+
+# -----------------------
+# Health server runner
+# -----------------------
+async def start_health_server():
+    """Start the FastAPI health app in-process via uvicorn and return a runner with cleanup()."""
+    import uvicorn
+    from src.monitoring.health_server import app as health_app
+
+    config = uvicorn.Config(
+        health_app,
+        host="0.0.0.0",
+        port=settings.HEALTH_PORT,
+        log_level="info",
+        loop="asyncio",
+    )
+    server = uvicorn.Server(config)
+
+    task = asyncio.create_task(server.serve(), name="uvicorn.health")
+
+    class _Runner:
+        async def cleanup(self) -> None:
+            server.should_exit = True
+            with contextlib.suppress(Exception):
+                await task
+
+    return _Runner()
 
 
 async def _run_application(stop_event: asyncio.Event) -> None:
@@ -136,8 +164,8 @@ async def _run_production() -> None:
         with contextlib.suppress(NotImplementedError):
             loop.add_signal_handler(sig, _request_shutdown)
 
-    health_checker = HealthChecker()
-    health_runner = await start_health_server(health_checker)
+    # Start FastAPI health server via uvicorn (background)
+    health_runner = await start_health_server()
 
     supervisor_task = asyncio.create_task(
         _supervised_background_services(task_manager),

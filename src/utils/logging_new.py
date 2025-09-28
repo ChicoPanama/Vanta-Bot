@@ -1,5 +1,5 @@
 import logging, json, sys
-from src.config.settings_new import settings
+from src.config.settings import settings
 
 def setup_logging(service: str = "vanta-bot") -> None:
     root = logging.getLogger()

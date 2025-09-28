@@ -5,7 +5,7 @@ from typing import Any, Dict, Optional, Tuple, Union
 
 from src.services.trading.trade_drafts import TradeDraft
 from src.services.copy_trading.execution_mode import execution_manager
-from src.config.settings_new import settings  # if you used the new settings; else import your existing
+from src.config.settings import settings  # unified central settings
 from src.bot.ui.formatting import fmt_usd
 from src.utils.resilience import CircuitBreaker, guarded_call
 from src.utils.obs import rid, log_exc

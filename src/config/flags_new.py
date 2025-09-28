@@ -1,7 +1,7 @@
-from src.config.settings_new import settings
+from src.config.settings import settings
 
 def execution_mode() -> str:
-    return settings.copy_execution_mode  # "DRY" or "LIVE"
+    return settings.COPY_EXECUTION_MODE  # "DRY" or "LIVE"
 
 def is_live() -> bool:
-    return execution_mode().upper() == "LIVE"
+    return settings.is_live_mode()

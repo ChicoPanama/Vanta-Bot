@@ -201,6 +201,27 @@ class Settings(BaseSettings):
         
         raise ValueError("Either AWS_KMS_KEY_ID or LOCAL_WRAP_KEY_B64 must be configured")
 
+    # ------------------------------------------------------------------
+    # Compatibility properties (legacy lower-case accessors)
+
+    @property
+    def default_slippage_pct(self) -> float:
+        """Legacy accessor used by some handlers/services."""
+        return self.DEFAULT_SLIPPAGE_PCT
+
+    @property
+    def trading_contract(self) -> Optional[str]:
+        """Legacy accessor mapping to AVANTIS_TRADING_CONTRACT."""
+        return self.AVANTIS_TRADING_CONTRACT
+
+    @property
+    def vault_contract(self) -> Optional[str]:
+        return self.AVANTIS_VAULT_CONTRACT
+
+    @property
+    def log_json(self) -> bool:
+        return self.LOG_JSON
+
     def runtime_summary(self) -> str:
         """Return a redacted runtime summary safe for logging."""
         # Normalize schemes for backwards-compatible display

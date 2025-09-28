@@ -3,8 +3,7 @@ from decimal import Decimal
 from telegram import Update
 from telegram.ext import CommandHandler, CallbackQueryHandler, ContextTypes
 from src.services.trading.execution_service import get_execution_service
-# from src.config.settings import settings
-from src.config.settings_new import settings
+from src.config.settings import settings
 from src.bot.ui.keyboards import kb
 from src.bot.ui.formatting import fmt_usd, fmt_px
 from src.utils.ratelimit import pos_limiter
