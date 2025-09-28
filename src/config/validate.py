@@ -20,12 +20,26 @@ def validate_required_secrets() -> None:
         RuntimeError: If any required secrets are missing or malformed.
     """
     if os.getenv("REQUIRE_CRITICAL_SECRETS", "true").lower() == "true":
+        # Mode-aware validation based on signer backend
+        signer_backend = os.getenv("SIGNER_BACKEND", "local").lower()
+        
+        # Always required secrets
         required_secrets = [
             "ENCRYPTION_KEY",
-            "TRADER_PRIVATE_KEY", 
             "TELEGRAM_BOT_TOKEN",
             "DATABASE_URL"
         ]
+        
+        # Mode-specific secrets
+        if signer_backend == "local":
+            required_secrets.append("TRADER_PRIVATE_KEY")
+        elif signer_backend == "kms":
+            required_secrets.extend([
+                "AWS_KMS_KEY_ID",
+                "AWS_REGION"
+            ])
+        else:
+            raise RuntimeError(f"Unknown SIGNER_BACKEND: {signer_backend}. Must be 'local' or 'kms'")
         
         missing_secrets = []
         for secret_name in required_secrets:
@@ -34,7 +48,7 @@ def validate_required_secrets() -> None:
         
         if missing_secrets:
             raise RuntimeError(
-                f"Missing required secrets: {', '.join(missing_secrets)}. "
+                f"Missing required secrets for {signer_backend} signer: {', '.join(missing_secrets)}. "
                 "Set REQUIRE_CRITICAL_SECRETS=false to disable this check."
             )
 
@@ -66,12 +80,45 @@ def validate_database_url() -> None:
     """
     database_url = os.getenv("DATABASE_URL")
     if database_url:
-        # Basic validation for PostgreSQL URL format
-        if not re.match(r'^postgresql://[^:]+:[^@]+@[^:]+:\d+/[^/]+$', database_url):
-            raise RuntimeError(
-                "Invalid DATABASE_URL format. Expected format: "
-                "postgresql://user:password@host:port/database"
-            )
+        try:
+            from sqlalchemy.engine.url import make_url
+            
+            # Parse URL using SQLAlchemy's URL parser
+            url = make_url(database_url)
+            
+            # Check for supported database drivers
+            supported_drivers = {
+                'postgresql+asyncpg',
+                'sqlite+aiosqlite',
+                'postgresql',  # Allow non-async for compatibility
+                'sqlite'       # Allow non-async for compatibility
+            }
+            
+            if url.drivername not in supported_drivers:
+                raise RuntimeError(
+                    f"Unsupported database driver: {url.drivername}. "
+                    f"Supported drivers: {', '.join(supported_drivers)}"
+                )
+            
+            # Additional validation for specific drivers
+            if url.drivername.startswith('postgresql'):
+                if not url.host:
+                    raise RuntimeError("PostgreSQL URL must include host")
+                if not url.database:
+                    raise RuntimeError("PostgreSQL URL must include database name")
+            
+        except ImportError:
+            # Fallback to basic validation if SQLAlchemy not available
+            if not (database_url.startswith('postgresql://') or 
+                   database_url.startswith('sqlite://') or
+                   database_url.startswith('sqlite+aiosqlite://')):
+                raise RuntimeError(
+                    "Invalid DATABASE_URL format. Expected format: "
+                    "postgresql://user:password@host:port/database or "
+                    "sqlite+aiosqlite:///path/to/database.db"
+                )
+        except Exception as e:
+            raise RuntimeError(f"Invalid DATABASE_URL format: {e}")
 
 
 def validate_telegram_token() -> None:

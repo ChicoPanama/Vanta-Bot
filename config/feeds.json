@@ -1,0 +1,58 @@
+{
+  "pyth": {
+    "endpoint": "https://hermes.pyth.network/v2/updates/price/latest",
+    "ws_endpoint": "wss://hermes.pyth.network/ws",
+    "symbols": {
+      "BTC": "0xe62df6c8b4a85fe1a67db44dc12de5db330f7ac66b4dc4e60a5713c7130b3bdf",
+      "ETH": "0xff61491a931112ddf1bd8147cd1b641375f79f5825126d665480874634fd0ace",
+      "SOL": "0xef0d8b6fda2ceba41da15d4095d1da392a0d3f76cddcec9e8963b5f719819e4b"
+    }
+  },
+  "chainlink": {
+    "base_network": {
+      "rpc_url": "https://mainnet.base.org",
+      "chain_id": 8453,
+      "feeds": {
+        "BTC": "0x64c911996D3c6aC71f9b455B1E8E7266BcbD848F",
+        "ETH": "0x71041dddad3595F9CEd3DcCFBe3D1F4b0a16Bb70",
+        "SOL": "0x975043adBb80fc32276CbF9Bbcfd4A601a12462D",
+        "CBBTC": "0x07DA0E54543a844a80ABE69c8A12F22B3aA59f9D",
+        "CBETH": "0xd7818272B9e248357d13057AAb0B417aF31E817d",
+        "AERO": "0x4EC5970fC728C5f65ba413992CD5fF6FD70fcfF0",
+        "EUR": "0xc91D5C4e0C8DC21E9a29Aa03C172421f313b3F0F",
+        "XAU": "0x5213eBB69743b85644dbB6E25cdF994aFBb8cF31",
+        "EURC": "0xDAe398520e2B67cd3f27aeF9Cf14D93D927f8250"
+      },
+      "sanity_ranges": {
+        "BTC": {"min": 10000, "max": 200000},
+        "ETH": {"min": 100, "max": 20000},
+        "SOL": {"min": 10, "max": 1000},
+        "CBBTC": {"min": 10000, "max": 200000},
+        "CBETH": {"min": 100, "max": 20000},
+        "AERO": {"min": 0.01, "max": 100},
+        "EUR": {"min": 0.8, "max": 1.5},
+        "XAU": {"min": 1000, "max": 5000},
+        "EURC": {"min": 0.8, "max": 1.5}
+      }
+    }
+  },
+  "oracle": {
+    "max_deviation_bps": 50,
+    "max_age_seconds": 30,
+    "validation": {
+      "staleness_threshold_hours": 1,
+      "price_deviation_threshold_bps": 1000
+    }
+  },
+  "execution_mode": {
+    "redis_key": "exec_mode",
+    "refresh_interval_seconds": 5,
+    "default_mode": "DRY",
+    "description": "Redis refresh interval for cluster coordination"
+  },
+  "metadata": {
+    "version": "1.0.0",
+    "last_updated": "2024-09-28",
+    "description": "Centralized configuration for oracle feeds and validation parameters"
+  }
+}

@@ -46,7 +46,11 @@ class RiskCalculator(object):
         liq_dist = Decimal('1') / leverage  # approximation, clearly marked in UI
 
         scenarios = self._scenarios(position_size_usd, account_balance_usd)
-        account_risk_pct = (scenarios['stress_2pct']['loss'] / account_balance_usd)
+        # Handle historical versions where scenario values are strings
+        loss_val = scenarios['stress_2pct']['loss_usd']
+        from decimal import Decimal as _D
+        loss_dec = _D(loss_val) if isinstance(loss_val, str) else loss_val
+        account_risk_pct = (loss_dec / account_balance_usd)
 
         risk_band = self._risk_band(account_risk_pct)
         lev_cat = self._lev_category(leverage)
@@ -78,7 +82,7 @@ class RiskCalculator(object):
             "aggressive":   str(_suggest(self.education.aggressive_account_risk)),
         }
 
-    def _scenarios(self, size: Decimal, balance: Decimal) -> Dict[str, Dict[str, str]]:
+    def _scenarios(self, size: Decimal, balance: Decimal) -> Dict[str, Dict[str, Decimal]]:
         out = {}
         for name, move in [
             ("small_0_5pct", Decimal("0.005")),
@@ -90,9 +94,9 @@ class RiskCalculator(object):
             loss = size * move
             impact = (loss / balance) if balance > 0 else Decimal("0")
             out[name] = {
-                "move_pct": str(move),
-                "loss_usd": str(loss),
-                "account_impact_pct": str(impact)
+                "move_pct": move,
+                "loss_usd": loss,
+                "account_impact_pct": impact
             }
         return out
 

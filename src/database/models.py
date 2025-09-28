@@ -69,18 +69,22 @@ class Order(Base):
     filled_at = Column(DateTime)
     tx_hash = Column(String(66))
 
+
 class Transaction(Base):
+    """Transaction audit trail for idempotency."""
     __tablename__ = 'transactions'
     
     id = Column(Integer, primary_key=True)
-    user_id = Column(Integer, nullable=False)
-    tx_hash = Column(String(66), unique=True)
-    tx_type = Column(String(20))  # DEPOSIT, WITHDRAW, TRADE, etc.
-    amount = Column(Float)
-    status = Column(String(10))   # PENDING, CONFIRMED, FAILED
+    request_id = Column(String(255), nullable=False, unique=True)
+    tx_hash = Column(String(66), nullable=False)
+    payload_hash = Column(String(64), nullable=False)  # SHA256 of tx params
     created_at = Column(DateTime, default=func.now())
-    confirmed_at = Column(DateTime)
-    gas_used = Column(Integer)
+    
+    # Unique constraint on request_id + payload_hash for idempotency
+    __table_args__ = (
+        Index('idx_request_payload', 'request_id', 'payload_hash', unique=True),
+    )
+
     gas_price = Column(Float)
 
 # Copy Trading Models

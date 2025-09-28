@@ -134,7 +134,15 @@ class BackgroundServiceManager:
             if not settings.DATABASE_URL:
                 return
             
-            engine = create_engine(settings.DATABASE_URL, pool_pre_ping=True)
+            # Ensure sync URL for background services (position tracker uses sync SQLAlchemy)
+            db_url = settings.DATABASE_URL
+            if "+aiosqlite" in db_url:
+                db_url = db_url.replace("+aiosqlite", "")
+                logger.info("Converted async DB URL to sync for position tracker")
+            if db_url.startswith("postgresql+asyncpg://"):
+                db_url = db_url.replace("postgresql+asyncpg://", "postgresql://", 1)
+                logger.info("Converted asyncpg URL to sync psycopg URL for position tracker")
+            engine = create_engine(db_url, pool_pre_ping=True)
             tracker = PositionTracker(engine=engine)
             
             # Set tracker for handlers
@@ -155,7 +163,17 @@ class BackgroundServiceManager:
                 return
             
             # Set up database session factory for indexer
-            engine = create_engine(settings.DATABASE_URL, pool_pre_ping=True)
+            # Ensure sync URL for background services (indexer uses sync SQLAlchemy)
+            db_url = settings.DATABASE_URL
+            if "+aiosqlite" in db_url:
+                # Convert async URL to sync for background services
+                db_url = db_url.replace("+aiosqlite", "")
+                logger.info("Converted async DB URL to sync for background services")
+            if db_url.startswith("postgresql+asyncpg://"):
+                db_url = db_url.replace("postgresql+asyncpg://", "postgresql://", 1)
+                logger.info("Converted asyncpg URL to sync psycopg URL for background services")
+            
+            engine = create_engine(db_url, pool_pre_ping=True)
             Session = sessionmaker(bind=engine, autoflush=False, autocommit=False)
             
             indexer = AvantisIndexer()

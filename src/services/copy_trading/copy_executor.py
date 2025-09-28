@@ -43,16 +43,17 @@ class CopyExecutor:
     async def follow(self, user_id: int, leader_address: str, cfg: CopyConfig) -> bool:
         """Start following a leader with the given configuration"""
         try:
-            with self.session_factory() as session:
+            async with self.session_factory() as session:
                 # Check if already following
-                existing = session.execute(
+                result = await session.execute(
                     text("SELECT id FROM copy_configurations WHERE user_id = :user_id AND leader_address = :leader_address"),
                     {"user_id": user_id, "leader_address": leader_address.lower()}
-                ).fetchone()
+                )
+                existing = result.fetchone()
                 
                 if existing:
                     # Update existing configuration
-                    session.execute(
+                    await session.execute(
                         text("""
                             UPDATE copy_configurations 
                             SET sizing_mode = :sizing_mode, sizing_value = :sizing_value,
@@ -76,7 +77,7 @@ class CopyExecutor:
                     logger.info("Updated copy configuration for user={} leader={}", user_id, leader_address)
                 else:
                     # Create new configuration
-                    session.execute(
+                    await session.execute(
                         text("""
                             INSERT INTO copy_configurations 
                             (user_id, leader_address, sizing_mode, sizing_value, max_slippage_bps,
@@ -99,7 +100,7 @@ class CopyExecutor:
                     )
                     logger.info("Created copy configuration for user={} leader={}", user_id, leader_address)
                 
-                session.commit()
+                await session.commit()
                 return True
                 
         except Exception as e:
@@ -109,9 +110,9 @@ class CopyExecutor:
     async def unfollow(self, user_id: int, leader_address: str) -> bool:
         """Stop following a leader"""
         try:
-            with self.session_factory() as session:
+            async with self.session_factory() as session:
                 # Deactivate configuration
-                result = session.execute(
+                result = await session.execute(
                     text("""
                         UPDATE copy_configurations 
                         SET is_active = false, updated_at = :updated_at
@@ -124,7 +125,7 @@ class CopyExecutor:
                     }
                 )
                 
-                session.commit()
+                await session.commit()
                 
                 if result.rowcount > 0:
                     logger.info("Unfollowed leader: user={} leader={}", user_id, leader_address)
@@ -140,9 +141,9 @@ class CopyExecutor:
     async def status(self, user_id: int) -> Dict[str, Any]:
         """Get copy trading status for a user"""
         try:
-            with self.session_factory() as session:
+            async with self.session_factory() as session:
                 # Get active configurations
-                configs = session.execute(
+                configs = await session.execute(
                     text("""
                         SELECT leader_address, sizing_mode, sizing_value, max_slippage_bps,
                                max_leverage, notional_cap, created_at
@@ -153,7 +154,7 @@ class CopyExecutor:
                 ).fetchall()
                 
                 # Get open copy positions
-                positions = session.execute(
+                positions = await session.execute(
                     text("""
                         SELECT leader_address, pair, is_long, size, entry_price,
                                opened_at, pnl, status
@@ -164,7 +165,7 @@ class CopyExecutor:
                 ).fetchall()
 
                 # Calculate 30-day PnL
-                pnl_result = session.execute(
+                pnl_result = await session.execute(
                     text("""
                         SELECT SUM(pnl) as total_pnl
                         FROM copy_positions
@@ -180,7 +181,7 @@ class CopyExecutor:
 
                 total_pnl = float(pnl_result.total_pnl or 0)
 
-                closed_positions = session.execute(
+                closed_positions = await session.execute(
                     text("""
                         SELECT size, entry_price, pnl
                         FROM copy_positions
@@ -227,9 +228,9 @@ class CopyExecutor:
         leader_address = leader_trade["address"]
         
         try:
-            with self.session_factory() as session:
+            async with self.session_factory() as session:
                 # Get user's copy configuration for this leader
-                config_result = session.execute(
+                config_result = await session.execute(
                     text("""
                         SELECT sizing_mode, sizing_value, max_slippage_bps, max_leverage,
                                notional_cap, pair_filters
@@ -308,7 +309,7 @@ class CopyExecutor:
                         # Record copy position
                         copy_ratio = notional / Decimal(leader_trade["size"]) if leader_trade["size"] > 0 else Decimal(0)
                         
-                        session.execute(
+                        await session.execute(
                             text("""
                                 INSERT INTO copy_positions
                                 (user_id, leader_address, leader_tx_hash, copy_tx_hash, pair, is_long,
@@ -330,7 +331,7 @@ class CopyExecutor:
                             }
                         )
                         
-                        session.commit()
+                        await session.commit()
                         
                         logger.info("Mirrored open trade: user={} leader={} pair={} notional={}", 
                                    user_id, leader_address, pair, notional)
@@ -352,9 +353,9 @@ class CopyExecutor:
         leader_address = leader_trade["address"]
         
         try:
-            with self.session_factory() as session:
+            async with self.session_factory() as session:
                 # Find open copy positions for this leader/pair
-                positions = session.execute(
+                positions = await session.execute(
                     text("""
                         SELECT id, size, entry_price, copy_tx_hash
                         FROM copy_positions
@@ -393,7 +394,7 @@ class CopyExecutor:
                         pnl = (close_price - entry_price) * Decimal(position.size)
                         
                         # Update position
-                        session.execute(
+                        await session.execute(
                             text("""
                                 UPDATE copy_positions
                                 SET closed_at = :closed_at, pnl = :pnl, status = 'CLOSED'
@@ -413,7 +414,7 @@ class CopyExecutor:
                         logger.exception("Failed to close copy position: {}", e)
                         continue
                 
-                session.commit()
+                await session.commit()
                 return True
                 
         except Exception as e:

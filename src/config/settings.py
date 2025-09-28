@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import os
 from functools import lru_cache
-from typing import List, Optional
+from typing import List, Optional, Union
 
 from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -60,6 +60,9 @@ class Settings(BaseSettings):
     LEADER_ACTIVE_HOURS: int = Field(72, env="LEADER_ACTIVE_HOURS")
     LEADER_MIN_TRADES_30D: int = Field(300, env="LEADER_MIN_TRADES_30D")
     LEADER_MIN_VOLUME_30D_USD: int = Field(10_000_000, env="LEADER_MIN_VOLUME_30D_USD")
+    
+    # Indexer settings
+    INDEXER_BACKFILL_RANGE: int = Field(1000, env="INDEXER_BACKFILL_RANGE")  # Number of blocks to backfill
 
     # Rate limiting & monitoring
     COPY_EXECUTION_RATE_LIMIT: int = Field(10, env="COPY_EXECUTION_RATE_LIMIT")
@@ -68,8 +71,8 @@ class Settings(BaseSettings):
     SENTRY_DSN: Optional[str] = Field(None, env="SENTRY_DSN")
 
     # Admin & control flags (accept CSV strings in env for tests)
-    ADMIN_USER_IDS: List[int] | str = Field(default_factory=list)
-    SUPER_ADMIN_IDS: List[int] | str = Field(default_factory=list)
+    ADMIN_USER_IDS: Union[List[int], str] = Field(default_factory=list)
+    SUPER_ADMIN_IDS: Union[List[int], str] = Field(default_factory=list)
 
     EMERGENCY_STOP: bool = Field(False, env="EMERGENCY_STOP")
     EMERGENCY_STOP_COPY_TRADING: bool = Field(False, env="EMERGENCY_STOP_COPY_TRADING")
@@ -78,6 +81,9 @@ class Settings(BaseSettings):
 
     # Health & diagnostics
     HEALTH_PORT: int = Field(8080, env="HEALTH_PORT")
+    
+    # Indexer / backfill configuration
+    INDEXER_BACKFILL_RANGE: int = Field(50_000, env="INDEXER_BACKFILL_RANGE")
 
     model_config = SettingsConfigDict(env_file=".env", case_sensitive=False)
 

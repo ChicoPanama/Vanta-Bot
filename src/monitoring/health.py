@@ -15,6 +15,7 @@ from sqlalchemy import create_engine, text
 from sqlalchemy.exc import SQLAlchemyError
 
 from src.config.settings import settings
+from src.services.copy_trading.execution_mode import execution_manager
 from src.utils.logging import get_logger, log_system_health
 from src.utils.errors import AppError
 
@@ -26,6 +27,57 @@ _health_state = {
     "last_check": None,
     "checks": {}
 }
+
+
+async def _get_oracle_status() -> dict:
+    """Get oracle status for operational visibility."""
+    try:
+        oracle_status = {
+            "execution_mode": execution_manager.get_health_metrics(),
+            "oracle_providers": {}
+        }
+        
+        # Test Pyth oracle
+        try:
+            from src.services.oracle_providers.pyth import PythOracle
+            pyth = PythOracle()
+            oracle_status["oracle_providers"]["pyth"] = {
+                "status": "available",
+                "endpoint": pyth.api_url,
+                "symbols": list(pyth.symbol_map.keys())
+            }
+        except Exception as e:
+            oracle_status["oracle_providers"]["pyth"] = {
+                "status": "error",
+                "error": str(e)
+            }
+        
+        # Test Chainlink oracle
+        try:
+            from src.services.oracle_providers.chainlink import ChainlinkOracle
+            from web3 import Web3
+            # Add request timeout to avoid health endpoint hangs on RPC issues
+            w3 = Web3(Web3.HTTPProvider(settings.BASE_RPC_URL, request_kwargs={"timeout": 10}))
+            # Skip startup validation inside health to keep endpoint responsive
+            chainlink = ChainlinkOracle(w3, validate_on_init=False)
+            oracle_status["oracle_providers"]["chainlink"] = {
+                "status": "available",
+                "feeds": list(chainlink.aggregators.keys()),
+                "feed_count": len(chainlink.aggregators)
+            }
+        except Exception as e:
+            oracle_status["oracle_providers"]["chainlink"] = {
+                "status": "error",
+                "error": str(e)
+            }
+        
+        return oracle_status
+        
+    except Exception as e:
+        return {
+            "status": "error",
+            "error": str(e)
+        }
 
 
 class HealthChecker:
@@ -345,6 +397,9 @@ def create_health_app() -> FastAPI:
                 "emergency_stop": settings.EMERGENCY_STOP
             }
             
+            # Include oracle status for operational visibility
+            checks["oracle_status"] = await _get_oracle_status()
+            
             # Update global state
             _health_state["last_check"] = time.time()
             _health_state["checks"] = checks
@@ -422,6 +477,16 @@ async def start_health_monitoring():
                 logger.error(f"Health monitoring error: {e}")
                 await asyncio.sleep(60)
     
+    @app.get("/oracle/status")
+    async def oracle_status():
+        """Lightweight oracle status endpoint for dashboards."""
+        try:
+            oracle_status = await _get_oracle_status()
+            return JSONResponse(content=oracle_status)
+        except Exception as e:
+            logger.error(f"Oracle status endpoint failed: {e}")
+            raise HTTPException(status_code=500, detail="Oracle status failed")
+
     # Start the monitoring task
     asyncio.create_task(health_monitor())
     logger.info("Health monitoring started")

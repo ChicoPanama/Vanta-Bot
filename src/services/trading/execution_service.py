@@ -4,7 +4,7 @@ from decimal import Decimal
 from typing import Any, Dict, Optional, Tuple, Union
 
 from src.services.trading.trade_drafts import TradeDraft
-from src.config.flags_standalone import is_live  # if you used the standalone; else from config.flags
+from src.services.copy_trading.execution_mode import execution_manager
 from src.config.settings_new import settings  # if you used the new settings; else import your existing
 from src.bot.ui.formatting import fmt_usd
 from src.utils.resilience import CircuitBreaker, guarded_call
@@ -26,7 +26,7 @@ try:
     )
     SDK_AVAILABLE = True
 except Exception as e:
-    logger.warning(f"Avantis SDK import failed: {e}")
+    log.warning(f"Avantis SDK import failed: {e}")
     SDK_AVAILABLE = False
 
 
@@ -176,7 +176,7 @@ class ExecutionService:
             if current_allowance >= usdc_required:
                 return True, "Already approved."
 
-            if not is_live():
+            if not execution_manager.can_execute():
                 # DRY: pretend success
                 return True, f"DRY mode: would approve {fmt_usd(usdc_required)} USDC."
 
@@ -239,7 +239,7 @@ class ExecutionService:
                 return False, "USDC allowance insufficient. Approve first.", {}
 
             # DRY path: simulate
-            if not is_live():
+            if not execution_manager.can_execute():
                 fake_hash = "0x" + "d" * 64
                 result = {"tx_hash": fake_hash, "mode": "DRY", "pair": pair_symbol, "side": side, "notional": str(notional)}
                 return True, "DRY: trade executed (simulated).", result
@@ -316,7 +316,7 @@ class ExecutionService:
                 return False, "Fraction must be between 0 and 1.", {}
 
             # DRY simulate
-            if not is_live():
+            if not execution_manager.can_execute():
                 fake_hash = "0x" + "c" * 64
                 return True, "DRY: position closed (simulated).", {"tx_hash": fake_hash, "mode": "DRY"}
 

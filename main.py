@@ -14,6 +14,7 @@ from src.config.flags import flags
 from src.config.validate import validate_all
 from src.monitoring.health_server import HealthChecker, start_health_server
 from src.services.background import BackgroundServiceManager
+from src.services.copy_trading.execution_mode import execution_manager
 from src.utils.errors import handle_exception
 from src.utils.logging import get_logger, set_trace_id, setup_logging
 from src.utils.supervisor import TaskManager
@@ -62,6 +63,41 @@ async def _run_development() -> None:
         logger.info("✅ Development shutdown complete", extra={"trace_id": trace_id})
 
 
+async def _periodic_redis_refresh() -> None:
+    """Periodically refresh execution mode from Redis for cluster coordination."""
+    from src.config.feeds_config import get_feeds_config
+    import os
+    
+    # Get refresh interval from config (default 5s)
+    feeds_config = get_feeds_config()
+    execution_config = feeds_config.get_execution_mode_config()
+    config_interval = execution_config.get('refresh_interval_seconds', 5)
+    
+    # Allow environment override for ops flexibility
+    env_interval = os.getenv('EXEC_MODE_REFRESH_S')
+    if env_interval:
+        try:
+            refresh_interval = int(env_interval)
+            logger.info(f"🔄 Using environment override for Redis refresh: {refresh_interval}s")
+        except ValueError:
+            refresh_interval = config_interval
+            logger.warning(f"Invalid EXEC_MODE_REFRESH_S value '{env_interval}', using config: {refresh_interval}s")
+    else:
+        refresh_interval = config_interval
+        logger.info(f"🔄 Starting Redis refresh with {refresh_interval}s interval (from config)")
+    
+    while True:
+        try:
+            execution_manager.refresh_from_redis()
+            await asyncio.sleep(refresh_interval)
+        except asyncio.CancelledError:
+            logger.info("🔄 Redis refresh task cancelled")
+            break
+        except Exception as e:
+            logger.warning(f"Redis refresh failed: {e}")
+            await asyncio.sleep(refresh_interval * 2)  # Wait longer on error
+
+
 async def _supervised_background_services(task_manager: TaskManager) -> None:
     background_manager = BackgroundServiceManager()
     task_manager.add_task(
@@ -107,6 +143,12 @@ async def _run_production() -> None:
         _supervised_background_services(task_manager),
         name="background.supervisor",
     )
+    
+    # Periodic Redis refresh for cluster coordination
+    redis_refresh_task = asyncio.create_task(
+        _periodic_redis_refresh(),
+        name="redis.refresh",
+    )
 
     try:
         await stop_event.wait()
@@ -115,8 +157,11 @@ async def _run_production() -> None:
         logger.info("🔻 Production shutdown requested", extra={"trace_id": trace_id})
     finally:
         supervisor_task.cancel()
+        redis_refresh_task.cancel()
         with contextlib.suppress(asyncio.CancelledError):
             await supervisor_task
+        with contextlib.suppress(asyncio.CancelledError):
+            await redis_refresh_task
         await health_runner.cleanup()
         logger.info("✅ Production shutdown complete", extra={"trace_id": trace_id})
 
