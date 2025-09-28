@@ -56,37 +56,67 @@ ENVIRONMENT=production python main.py
 
 ## 📱 **Bot Commands**
 
-### **Getting Started**
-- `/start` - Welcome message and first-run tour
-- `/help` - Quick command reference and usage guide
-- `/markets` - Browse available trading pairs with user preferences
+### **🚀 Getting Started**
+- `/start` - Initialize bot and create wallet
+- `/help` - Command reference
+- `/markets` - Browse trading markets
 
-### **Trading**
-- `/positions` - View and manage your open positions
-- `/analyze` - Educational risk analysis (Phase 5)
-- `/calc` - Position size calculator and helper
+### **💰 Trading**
+- `/wallet` - View balance and wallet
+- `/trade` - Open trading interface
+- `/positions` - View open positions
+- `/portfolio` - Portfolio analytics
+- `/orders` - View pending orders
 
-### **User Settings**
-- `/prefs` - Configure default slippage, leverage chips, collateral chips, and favorites
-- `/mode` - Set UI preference (DRY/LIVE) - *server controls actual execution mode*
-- `/linkwallet` - Link EVM address for read-only analytics (optional)
+### **⚙️ Settings**
+- `/settings` - Bot settings
+- `/prefs` - User preferences
+- `/mode` - Switch interface (Simple/Advanced)
+- `/linkwallet` - Link external wallet
 
-### **Copy-Trading**
-- `/alfa top50` - View top traders with Follow buttons for easy copy-trading setup
-- `/follow <trader_id>` - Follow a trader and configure copy settings
-- `/following` - Manage your followed traders and their copy settings
-- `/unfollow <trader_id>` - Stop following a trader
+### **📊 Risk & Education**
+- `/analyze <ASSET> <SIZE> <LEVERAGE>` - Risk analysis
+- `/calc <ASSET> <LEVERAGE> [risk%]` - Position calculator
 
-### **Admin Commands**
-- `/autocopy_off_all` - Emergency disable auto-copy for all users
-- `/autocopy_on_user <id>` - Enable auto-copy for specific user
-- `/autocopy_off_user <id>` - Disable auto-copy for specific user
+### **🤖 AI Features**
+- `/alpha` - AI insights and market intelligence
+- `/alfa top50` - AI-ranked trader leaderboard
 
-### **System & Admin**
-- `/health` - System health and uptime status
-- `/diag` - Diagnostic information and circuit status
+### **🔄 Copy Trading**
+- `/follow <trader_id>` - Follow a trader
+- `/following` - Manage followed traders
+- `/unfollow <trader_id>` - Stop following
+- `/status` - Copy trading status
 
-> **Note**: All user preferences are optional and stored locally. The `/mode` command sets your UI preference only - actual execution mode is controlled by server configuration for safety.
+### **📈 Advanced Trading**
+- `/a_quote <PAIR> <SIDE> <SIZE> <LEV>` - Get trading quote
+- `/a_price <PAIR>` - Get asset price
+- `/a_open <PAIR> <SIDE> <SIZE> <LEV>` - Execute trade
+
+### **🛠️ Admin Commands**
+- `/health` - System health check
+- `/diag` - Diagnostic information
+- `/recent_errors` - Recent system errors
+- `/latency` - System latency check
+- `/emergency` - Emergency stop all trading
+- `/autocopy_off_all` - Disable auto-copy for all users
+- `/copy mode DRY|LIVE` - Toggle execution mode
+
+### **💡 Quick Start**
+```
+/start → /wallet → /trade → /positions
+```
+
+### **🎯 Interface Types**
+- **🟢 Simple**: Quick trading for beginners
+- **🔴 Advanced**: Professional tools and analytics
+
+### **⚡ Key Features**
+- 80+ markets (Crypto, Forex, Commodities)
+- Up to 500x leverage
+- Zero fees on entry/exit
+- AI-powered copy trading
+- Real-time execution on Avantis Protocol
 
 ## ✨ **Enterprise Features**
 
