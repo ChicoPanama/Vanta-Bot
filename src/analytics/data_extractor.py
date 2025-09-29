@@ -81,9 +81,12 @@ class AvantisEventIndexer:
             self.web3 = Web3(Web3.WebsocketProvider(self.config.BASE_WS_URL))
             self.web3.middleware_onion.inject(geth_poa_middleware, layer=0)
 
-            # Load Trading contract ABI
+            # Load Trading contract ABI (handle artifact JSON with top-level 'abi')
             with open('config/abis/Trading.json') as f:
-                trading_abi = json.load(f)
+                _obj = json.load(f)
+                trading_abi = _obj.get('abi', _obj) if isinstance(_obj, dict) else _obj
+                if not isinstance(trading_abi, list):
+                    raise ValueError("Trading ABI is not a list; invalid ABI file format")
 
             # Validate address; if invalid for tests, disable contract usage
             addr = getattr(self.config, "AVANTIS_TRADING_CONTRACT", None)

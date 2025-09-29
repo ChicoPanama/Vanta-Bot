@@ -63,10 +63,18 @@ class TraderPosition:
     tx_close: Optional[str]
 
 def _load_abi(path: str) -> List[Dict[str, Any]]:
-    """Load ABI from JSON file with fallback"""
+    """Load ABI from JSON file with fallback.
+
+    Supports both plain ABI arrays and artifact JSON with a top-level 'abi' key.
+    """
     try:
         with open(path, "r") as f:
-            return json.load(f)
+            obj = json.load(f)
+        abi = obj.get("abi", obj) if isinstance(obj, dict) else obj
+        if not isinstance(abi, list):
+            logger.error(f"ABI at {path} is not a list; got {type(abi).__name__}")
+            return []
+        return abi
     except FileNotFoundError:
         logger.warning(f"ABI file not found: {path}. Using empty ABI.")
         return []

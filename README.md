@@ -1,316 +1,286 @@
-# 🚀 Vanta Bot — Telegram Trading on Base (Avantis)
+# 🚀 Avantis Trading Bot - Production Ready
 
-[![Python](https://img.shields.io/badge/Python-3.10%2B-blue.svg)](pyproject.toml)
-[![License](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
-[![Docker](https://img.shields.io/badge/Docker-Compose-blue.svg)](docker-compose.yml)
-[![Base Network](https://img.shields.io/badge/Network-Base%20L2-8B5CF6.svg)](https://base.org)
+[![CI](https://github.com/avantis-trading/avantis-telegram-bot/workflows/CI/badge.svg)](https://github.com/avantis-trading/avantis-telegram-bot/actions)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![Python 3.9+](https://img.shields.io/badge/python-3.9+-blue.svg)](https://www.python.org/downloads/)
 
-Production‑ready Telegram bot for the Avantis Protocol on Base. Includes copy‑trading, price oracles (Pyth + Chainlink), background indexers, optional Avantis Trader SDK integration, and health/metrics endpoints.
+**Production-ready Avantis trading bot with layered architecture, single-scaling invariant, and comprehensive validation.**
 
-Key entry points:
-- Bot entry: `main.py:1`
-- Bot app factory: `src/bot/application.py:1`
-- Health server (FastAPI): `src/monitoring/health_server.py:1`
-- Settings & flags: `src/config/settings.py:1`, `src/config/flags.py:1`
+## ✨ Features
 
-## Features
+- 🏗️ **Layered Architecture**: Clean separation of concerns with core domain, adapters, and services
+- 🔒 **Single-Scaling Invariant**: Authoritative scaling functions prevent double-scaling issues
+- 🛡️ **Comprehensive Validation**: Multi-layer validation with risk limits and business rules
+- 🚀 **Production Ready**: Bulletproof error handling, logging, and monitoring
+- 📊 **CLI Tools**: Clean command-line interfaces for trading operations
+- 🧪 **Extensive Testing**: Unit, integration, and e2e tests with proper separation
+- 🔧 **Modern Tooling**: Pre-commit hooks, CI/CD, linting, and type checking
 
-- Telegram bot with modular handlers (start, wallet, trade, positions, portfolio, orders, settings)
-- Copy‑trading UX and commands (`/alfa`, `/follow`, `/status`, `/unfollow`)
-- AI/analytics surfaces (leaderboard, insights, position tracking)
-- Oracle facade with Pyth + Chainlink providers and deviation/freshness checks
-- Background services: Avantis indexer, price feed client, health monitoring
-- Envelope encryption support (AWS KMS or local Fernet) for wallets
-- Async SQLAlchemy models and operations (SQLite/Postgres)
-- Redis‑backed execution mode and rate limiting utilities
-- Health and metrics endpoints (FastAPI) for ops
+## 🏗️ Architecture
 
-See project structure: `docs/project-structure.md`
+```
+src/
+├── core/                # Pure business logic (no I/O)
+│   ├── math.py         # Authoritative scaling functions
+│   ├── models.py       # Strict data models
+│   └── validation.py   # Business rules and validation
+├── adapters/           # External system interfaces
+│   ├── web3_trading.py # Direct contract interactions
+│   ├── pyth_feed.py    # Price feed integration
+│   └── address_guard.py # Legacy address protection
+├── services/           # Business orchestration
+│   └── trade_service.py # Complete trading flow
+└── cli/               # Command-line interfaces
+    ├── open_trade.py   # Trade execution CLI
+    ├── preflight.py    # Validation CLI
+    └── monitor_unpaused.py # Contract monitoring
+```
 
-## Quick Start
+## 🚀 Quick Start
 
-Development (local, minimal requirements):
+### 1. Installation
+
 ```bash
-git clone <repo>
+# Clone the repository
+git clone https://github.com/avantis-trading/avantis-telegram-bot.git
 cd avantis-telegram-bot
-python -m venv .venv && source .venv/bin/activate
-pip install -r requirements.txt
-cp env.example .env
 
-# Minimal local overrides
-echo "BASE_RPC_URL=memory" >> .env                 # in‑memory Web3
-echo "REQUIRE_CRITICAL_SECRETS=false" >> .env      # bypass strict startup checks
-echo "ENCRYPTION_KEY=$(python - <<'PY'
-from cryptography.fernet import Fernet
-print(Fernet.generate_key().decode())
-PY
-)" >> .env
+# Install dependencies
+pip install -e ".[dev]"
 
-# Set your Telegram bot token
-sed -i.bak 's|TELEGRAM_BOT_TOKEN=.*|TELEGRAM_BOT_TOKEN=123456789:ABC...|' .env
-
-python main.py
+# Set up pre-commit hooks
+pre-commit install
 ```
 
-Production‑grade run (real RPC, Redis, DB, secrets set):
+### 2. Configuration
+
 ```bash
-pip install -r requirements.txt
-alembic upgrade head
-ENVIRONMENT=production LOG_JSON=true python main.py
+# Copy environment template
+cp env/.env.example env/.env
+
+# Edit configuration
+nano env/.env
 ```
 
-Docker:
+Required environment variables:
 ```bash
-docker-compose up -d
+BASE_RPC_URL=https://mainnet.base.org
+TRADER_PRIVATE_KEY=your_private_key_here
+TELEGRAM_BOT_TOKEN=your_bot_token_here
 ```
 
-Enterprise deploy script: `python scripts/deploy_enterprise.py`
+### 3. Validate Setup
 
-## Step‑by‑Step Setup (No Gaps)
-
-1) Install prerequisites
-- macOS (Homebrew): `brew install python@3.11 redis`
-- Ubuntu/Debian: `sudo apt update && sudo apt install -y python3.11 python3.11-venv redis-server`
-- Windows: Install Python 3.11, use PowerShell, consider WSL for best parity
-
-2) Create and activate venv
 ```bash
-python -m venv .venv
-source .venv/bin/activate  # Windows: .venv\Scripts\activate
+# Run preflight check
+python -m src.cli.preflight
+
+# Run unit tests
+pytest tests/unit -v
+
+# Check linting
+ruff check .
+black --check .
 ```
 
-3) Install deps
+### 4. Execute Trade
+
 ```bash
-pip install -r requirements.txt
+# Dry run (recommended first)
+python -m src.cli.open_trade --collat 10 --lev 2 --slip 1 --pair 0 --long
+
+# Live trade (when ready)
+python -m src.cli.open_trade --collat 10 --lev 2 --slip 1 --pair 0 --long --live
 ```
 
-4) Configure environment
+## 🛠️ CLI Tools
+
+### Open Trade
 ```bash
-cp env.example .env
-# Edit .env with your values (TELEGRAM_BOT_TOKEN at minimum)
-# For local dev add:
-echo "BASE_RPC_URL=memory" >> .env
-echo "REQUIRE_CRITICAL_SECRETS=false" >> .env
-python scripts/generate_key.py  # copy the key into ENCRYPTION_KEY in .env
+# Open a $10 long BTC position with 2x leverage and 1% slippage
+python -m src.cli.open_trade --collat 10 --lev 2 --slip 1 --pair 0 --long
+
+# Short ETH position with 5x leverage
+python -m src.cli.open_trade --collat 100 --lev 5 --slip 0.5 --pair 1 --short --live
 ```
 
-5) Initialize database (optional; SQLite auto‑creates; Postgres requires migrations)
+### Preflight Validation
 ```bash
-# SQLite (default): nothing to do
-# PostgreSQL example:
-export DATABASE_URL=postgresql://user:pass@localhost:5432/vanta_bot
-alembic upgrade head
+# Check contract status and wallet info
+python -m src.cli.preflight
+
+# Validate specific trade parameters
+python -m src.cli.preflight --collat 10 --lev 2 --slip 1 --pair 0 --long
 ```
 
-6) Run the bot
+### Contract Monitoring
 ```bash
-python main.py
+# Monitor for contract unpause events
+python -m src.cli.monitor_unpaused
+
+# Auto-test when unpaused
+python -m src.cli.monitor_unpaused --auto-test
 ```
 
-7) Start health API (optional but recommended)
+## 🧪 Testing
+
+### Unit Tests (Fast)
 ```bash
-uvicorn src.monitoring.health_server:app --host 0.0.0.0 --port ${HEALTH_PORT:-8080}
-curl -s http://localhost:8080/health | jq .
+# Run all unit tests
+pytest tests/unit -v
+
+# Run with coverage
+pytest tests/unit --cov=src --cov-report=html
 ```
 
-8) Talk to your bot
-- In Telegram, message your bot (BotFather token) and send `/start`
-- Follow the menus or use commands listed below
-
-## Configuration
-
-Required for development quick start:
-- `TELEGRAM_BOT_TOKEN` – token from BotFather
-- `ENCRYPTION_KEY` – Fernet key (see generation above)
-- `DATABASE_URL` – defaults to `sqlite+aiosqlite:///vanta_bot.db`
-- `BASE_RPC_URL` – set to `memory` for local dev or a real Base RPC URL
-
-Required for live trading (choose a signer backend):
-- Local signer: `TRADER_PRIVATE_KEY` (hex) and `SIGNER_BACKEND=local`
-- AWS KMS signer: `AWS_KMS_KEY_ID`, `AWS_REGION` and `SIGNER_BACKEND=kms`
-
-Core settings (defaults in code):
-- Network: `BASE_RPC_URL`, `BASE_CHAIN_ID`, `BASE_WS_URL`
-- Data stores: `DATABASE_URL`, `REDIS_URL`
-- Security: `KEY_ENVELOPE_ENABLED`, `LOCAL_WRAP_KEY_B64` or `AWS_KMS_KEY_ID`
-- Contracts: `AVANTIS_TRADING_CONTRACT`, `AVANTIS_VAULT_CONTRACT`, `USDC_CONTRACT`
-- Mode/limits: `COPY_EXECUTION_MODE` (DRY|LIVE), `DEFAULT_SLIPPAGE_PCT`, `MAX_LEVERAGE`, `MAX_COPY_LEVERAGE`
-- Admin & ops: `ADMIN_USER_IDS`, `SUPER_ADMIN_IDS`, `HEALTH_PORT`, `ENABLE_METRICS`
-- Oracle thresholds: `ORACLE_MAX_DEVIATION_BPS`, `ORACLE_MAX_AGE_S`
-
-Centralized feed config is supported: `config/feeds.json` (see `src/config/feeds_config.py:1`).
-
-Live trading checklist (required)
-- Set `SIGNER_BACKEND=local` and `TRADER_PRIVATE_KEY=<hex>` or `SIGNER_BACKEND=kms` with `AWS_KMS_KEY_ID` and `AWS_REGION`
-- Set realistic `BASE_RPC_URL` (Alchemy/QuickNode Base) and `BASE_CHAIN_ID=8453`
-- Ensure `REDIS_URL` and `DATABASE_URL` point to production services
-- Set `COPY_EXECUTION_MODE=LIVE` and verify `/copy mode LIVE` as admin
-- Configure contracts: `AVANTIS_TRADING_CONTRACT` (vault auto‑resolved at runtime)
-- Keep `LOG_JSON=true` and proper log level in production
-
-## Usage (Telegram Commands)
-
-- Getting started: `/start`, `/help`
-- Core: `/wallet`, `/trade`, `/positions`, `/portfolio`, `/orders`, `/settings`
-- Risk & education: `/analyze <ASSET> <SIZE> <LEV>`, `/calc <ASSET> <LEV> [risk%]`
-- AI & insights: `/alpha`, `/alfa top50`
-- Copy trading: `/follow <address>`, `/status`, `/unfollow <address>`
-- Admin: `/health`, `/diag`, `/recent_errors`, `/latency`, `/autocopy_off_all`
-
-Handlers are wired via `src/bot/handlers/registry.py:1` and `src/bot/application.py:1`.
-
-### Command Reference with Examples
-
-- `/start`
-  - Registers you in the bot and shows the main menu. Required before other commands.
-- `/help`
-  - Displays a short guide and command list.
-- `/markets`
-  - Opens market browser with inline buttons for assets and categories.
-- `/wallet`
-  - Shows your wallet address and balances (ETH, USDC). Deposit USDC to trade.
-- `/linkwallet`
-  - Starts a short flow to link an external wallet (if supported by your setup).
-- `/prefs`
-  - Opens your preferences (e.g., default slippage). Stored server‑side.
-- `/mode`
-  - Switch between simple and advanced UI modes.
-- `/trade`
-  - Opens the interactive trading UI: choose direction → asset → leverage → type size → confirm.
-- `/a_quote <PAIR> <SIDE> <COLL_USDC> <LEV> [slip%]`
-  - Power users: get a quote directly.
-  - Example: `/a_quote ETH/USD LONG 100 25 1`
-  - Shows notional, fees, protection, and allowance status.
-- `/positions`
-  - Lists your open and recent positions.
-- `/portfolio`
-  - High‑level portfolio analytics (PnL, win rate, etc.).
-- `/orders`
-  - Lists pending orders (if applicable).
-
-Copy‑Trading
-- `/alfa top50`
-  - Shows AI‑ranked trader leaderboard (address, score, volume, risk level) with quick actions.
-- `/follow <trader_id_or_address>`
-  - Starts follow and opens an inline settings panel (auto‑copy, sizing mode, caps, leverage, slippage, protection). Example: `/follow 0x1234...`
-- `/following`
-  - Lists your current follows with quick settings/unfollow buttons.
-- `/status`
-  - Copy‑trading status: leaders followed, open copied positions, 30D P&L/volume/win‑rate.
-- `/unfollow <trader_id_or_address>`
-  - Stops following a trader.
-
-Admin (only IDs in `ADMIN_USER_IDS`)
-- `/copy mode DRY|LIVE`
-  - Toggle execution mode. Example: `/copy mode LIVE`
-- `/emergency stop|start`
-  - Global emergency stop for copy execution.
-- `/status`
-  - System status summary (admin version). Note: non‑admin users have a different `/status` for copy stats.
-- `/health`, `/diag`, `/recent_errors`, `/latency`, `/autocopy_off_all`, `/autocopy_on_user <id>`, `/autocopy_off_user <id>`
-
-Tips
-- If you see “User not found. Please /start first.” → run `/start` once.
-- If quotes show “Approve USDC”, follow the inline button to set allowance before executing.
-
-## Health & Metrics
-
-- FastAPI app: `src/monitoring/health_server.py:1`
-- Endpoints: `/live`, `/ready`, `/health`, `/metrics`
-
-Run separately via uvicorn (recommended):
+### Integration Tests (Requires RPC)
 ```bash
-uvicorn src.monitoring.health_server:app --host 0.0.0.0 --port ${HEALTH_PORT:-8080}
+# Run integration tests
+pytest -m integration -v
+
+# Skip integration tests
+pytest --ignore-marker integration
 ```
 
-Note: Background health monitoring is started from `src/services/background.py:1`. If endpoints are not available in your run mode, prefer the uvicorn command above.
-
-## Architecture
-
-High‑level overview:
-```
-Telegram Bot (PTB v20)
-  ├─ Handlers: start, wallet, trade, positions, copy_trading
-  ├─ Middleware: auth, rate limit, errors
-  └─ Services: trading, analytics, copytrading
-
-Background Services
-  ├─ Avantis indexer (HTTP+WS)
-  ├─ Price feed client (Pyth via Avantis SDK)
-  └─ Health monitoring tasks
-
-Core Modules
-  ├─ Oracle facade (Pyth + Chainlink)
-  ├─ Web3 base client, signers (local/KMS)
-  ├─ SQLAlchemy models/ops (SQLite/Postgres)
-  └─ Key vault (envelope or legacy Fernet)
-```
-
-Key files to explore:
-- Bot app: `src/bot/application.py:1`
-- Handlers: `src/bot/handlers/*`
-- Trading services: `src/services/trading/`
-- Copy‑trading: `src/services/copytrading/`
-- Oracles: `src/services/oracle.py:1`, `src/services/oracle_providers/`
-- Blockchain client: `src/blockchain/base_client.py:1`, `src/blockchain/signers/`
-- Background: `src/services/background.py:1`
-- Health: `src/monitoring/health_server.py:1`, `src/monitoring/health.py:1`
-
-## Testing
-
-Install dev deps and run tests:
+### End-to-End Tests (Full Setup)
 ```bash
-pip install -r requirements.txt
-pytest -q
+# Enable e2e tests (requires CONFIRM_SEND=YES)
+export CONFIRM_SEND=YES
+pytest -m e2e -v
 ```
 
-Helpful subsets:
+## 🔒 Security
+
+### Address Protection
+The bot includes automatic protection against deprecated contract addresses:
+
+```python
+from src.adapters.address_guard import validate_contract_address
+
+# This will raise an error if using deprecated address
+validate_contract_address("0x5FF2...0535f", "trading contract")
+```
+
+### Risk Management
+Built-in risk limits and validation:
+
+- Maximum position size: $100,000 USDC
+- Maximum account risk: 10%
+- Maximum leverage: 500x
+- Maximum slippage: 10%
+
+## 📊 Key Improvements
+
+### ✅ Single-Scaling Invariant
+- **Before**: Double-scaling caused 1% slippage to become 100,000,000%
+- **After**: Authoritative scaling functions ensure correct single scaling
+
+### ✅ Layered Architecture
+- **Before**: Monolithic code with mixed concerns
+- **After**: Clean separation with core domain, adapters, and services
+
+### ✅ Comprehensive Validation
+- **Before**: Basic parameter checks
+- **After**: Multi-layer validation with risk limits and business rules
+
+### ✅ Production Hardening
+- **Before**: Basic error handling
+- **After**: Bulletproof error handling, logging, and monitoring
+
+## 🔧 Development
+
+### Code Quality
 ```bash
-pytest tests/test_symbols.py -q                   # market symbol normalization
-pytest tests/test_oracle_facade_fixed.py -q      # oracle facade behavior
-pytest tests/test_execution_mode_redis.py -q     # Redis‑backed execution mode
+# Format code
+black .
+isort .
+
+# Lint code
+ruff check . --fix
+
+# Type check
+mypy src
+
+# Run all checks
+pre-commit run --all-files
 ```
 
-See `docs/TESTING.md` for details.
+### Adding New Features
+1. Add business logic to `src/core/`
+2. Add external interfaces to `src/adapters/`
+3. Add orchestration to `src/services/`
+4. Add CLI tools to `src/cli/`
+5. Add tests to `tests/unit/`, `tests/integration/`, or `tests/e2e/`
 
-## Troubleshooting
+## 📈 Monitoring
 
-- Startup validation failed (missing secrets)
-  - Set `REQUIRE_CRITICAL_SECRETS=false` for local dev, or provide `TRADER_PRIVATE_KEY`/KMS vars
-- Cannot connect to RPC
-  - Verify `BASE_RPC_URL` or use `BASE_RPC_URL=memory` for local dev
-- Health endpoints not found
-  - Run uvicorn: `uvicorn src.monitoring.health_server:app --port 8080`
-- Redis warnings during startup
-  - Redis is optional; some features degrade gracefully without it
+### Contract Status
+```bash
+# Check if trading is paused
+python -m src.cli.preflight
+```
 
-More: `docs/troubleshooting.md`
+### Successful Trade Logging
+All successful trades are logged with:
+- Transaction hash and BaseScan URL
+- Exact parameters used
+- Gas consumption
+- Block number
 
-## Documentation
+## 🚨 Troubleshooting
 
-- Installation: `docs/installation.md`
-- Configuration: `docs/configuration.md`
-- Architecture: `docs/architecture.md`
-- Project structure: `docs/project-structure.md`
-- Production hardening: `docs/production-hardening-checklist.md`
-- Testing: `docs/TESTING.md`
+### Common Issues
 
-## Contributing
+**"DEPRECATED ADDRESS DETECTED"**
+- Update to use current contract addresses in `config/addresses/base.mainnet.json`
 
-Pull requests are welcome. Please:
-- Add/adjust tests for behavior changes
-- Follow existing code style (see linters in `pyproject.toml`)
-- Keep docs and `env.example` in sync
+**"INVALID_SLIPPAGE"**
+- Ensure slippage is in human units (1.0 for 1%), not pre-scaled
+- Check that slippage doesn't exceed contract limits
 
-See `docs/contributing.md` for guidance.
+**"Contract is paused"**
+- Use `python -m src.cli.monitor_unpaused` to wait for unpause
+- Trading will automatically resume when contract unpauses
 
-## License
+### Debug Mode
+```bash
+# Enable verbose logging
+python -m src.cli.open_trade --collat 10 --lev 2 --slip 1 --pair 0 --long --verbose
+```
 
-MIT — see `LICENSE`.
+## 📝 Changelog
 
-## Acknowledgments
+### v2.1.0 (2024-12-19)
+- ✅ **BREAKING**: Layered architecture with clean module boundaries
+- ✅ **FIX**: Single-scaling invariant prevents double-scaling issues
+- ✅ **NEW**: Comprehensive validation with risk limits
+- ✅ **NEW**: CLI tools for trading operations
+- ✅ **NEW**: Address guard prevents deprecated address usage
+- ✅ **NEW**: Extensive test suite with proper separation
+- ✅ **NEW**: Modern tooling with pre-commit hooks and CI/CD
 
-- Avantis Protocol and Base Network
-- Open‑source libraries listed in `pyproject.toml`
+### v2.0.0 (Previous)
+- Basic trading functionality
+- SDK integration (with scaling issues)
 
-— Built for decentralized trading on Base
+## 🤝 Contributing
+
+1. Fork the repository
+2. Create a feature branch
+3. Make changes with tests
+4. Run pre-commit hooks
+5. Submit a pull request
+
+## 📄 License
+
+MIT License - see [LICENSE](LICENSE) file for details.
+
+## 🆘 Support
+
+- **Issues**: [GitHub Issues](https://github.com/avantis-trading/avantis-telegram-bot/issues)
+- **Discussions**: [GitHub Discussions](https://github.com/avantis-trading/avantis-telegram-bot/discussions)
+- **Security**: [Security Policy](SECURITY.md)
+
+---
+
+**⚠️ Disclaimer**: This software is for educational and research purposes. Trading involves risk. Use at your own discretion.

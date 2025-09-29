@@ -49,7 +49,11 @@ class ABILoader:
                 if actual_hash != expected_sha256:
                     raise ValueError(f"ABI hash mismatch for {name}: expected {expected_sha256}, got {actual_hash}")
             
-            abi = json.loads(abi_content)
+            parsed = json.loads(abi_content)
+            # Support both plain ABI array and artifact JSON with top-level "abi" key
+            abi = parsed.get("abi", parsed) if isinstance(parsed, dict) else parsed
+            if not isinstance(abi, list):
+                raise ValueError(f"ABI for {name} is not a list (got {type(abi).__name__})")
             self._loaded_abis[name] = abi
             self._abi_hashes[name] = hashlib.sha256(abi_content.encode()).hexdigest()
             

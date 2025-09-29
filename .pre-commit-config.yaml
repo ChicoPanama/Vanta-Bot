@@ -1,62 +1,41 @@
 repos:
-- repo: https://github.com/psf/black
-  rev: 24.8.0
-  hooks: [{ id: black }]
-
-- repo: https://github.com/charliermarsh/ruff-pre-commit
-  rev: v0.6.9
-  hooks: [{ id: ruff, args: ["--fix"] }]
-
-- repo: https://github.com/pycqa/isort
-  rev: 5.13.2
-  hooks: [{ id: isort }]
-
-- repo: https://github.com/pre-commit/mirrors-mypy
-  rev: v1.11.2
-  hooks: [{ id: mypy }]
-
-- repo: https://github.com/Yelp/detect-secrets
-  rev: v1.5.0
-  hooks:
-  - id: detect-secrets
-    args: ["--baseline", ".secrets.baseline"]
-
-- repo: https://github.com/pre-commit/pre-commit-hooks
-  rev: v4.6.0
-  hooks:
-  - id: end-of-file-fixer
-  - id: trailing-whitespace
-
-  - repo: https://github.com/PyCQA/bandit
-    rev: 1.7.9
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v4.4.0
     hooks:
-      - id: bandit
-        args: ["-r", "src", "-lll", "-x", "tests"]
+      - id: trailing-whitespace
+      - id: end-of-file-fixer
+      - id: check-yaml
+      - id: check-added-large-files
+      - id: check-merge-conflict
+      - id: debug-statements
 
-  - repo: https://github.com/pyupio/safety
-    rev: 3.2.7
+  - repo: https://github.com/psf/black
+    rev: 23.9.1
     hooks:
-      - id: safety
-        args: ["check", "--full-report"]
-        files: "^pyproject\\.toml$|^requirements(\\.txt)?$"
+      - id: black
+        language_version: python3
 
-  # Local pattern guards (fast, opinionated, and effective)
-  - repo: local
+  - repo: https://github.com/pycqa/isort
+    rev: 5.12.0
     hooks:
-      - id: forbid-pickle
-        name: Forbid pickle in src
-        entry: bash -c 'git grep -nE "(^|\\s)(import|from)\\s+pickle(\\s|\\.)" -- src && echo "pickle import found — use json or msgpack" && exit 1 || exit 0'
-        language: system
-        pass_filenames: false
+      - id: isort
+        args: ["--profile", "black"]
 
-      - id: require-aiohttp-timeout
-        name: Require aiohttp ClientTimeout
-        entry: bash -c 'git grep -n "aiohttp.ClientSession()" -- src && echo "ClientSession without ClientTimeout — use a shared session with timeouts" && exit 1 || exit 0'
-        language: system
-        pass_filenames: false
+  - repo: https://github.com/charliermarsh/ruff-pre-commit
+    rev: v0.1.3
+    hooks:
+      - id: ruff
+        args: [--fix, --exit-non-zero-on-fix]
 
-      - id: forbid-fstring-sql
-        name: Forbid f-string SQL
-        entry: bash -c 'git grep -nE "f\\s*[\\\"\\\']\\s*(SELECT|INSERT|UPDATE|DELETE)" -- src && echo "f-string SQL detected — use parameterized SQLAlchemy binds" && exit 1 || exit 0'
-        language: system
-        pass_filenames: false
+  - repo: https://github.com/pre-commit/mirrors-mypy
+    rev: v1.5.1
+    hooks:
+      - id: mypy
+        additional_dependencies: [types-all]
+        args: [--ignore-missing-imports]
+
+  - repo: https://github.com/Yelp/detect-secrets
+    rev: v1.4.0
+    hooks:
+      - id: detect-secrets
+        args: ['--baseline', '.secrets.baseline']

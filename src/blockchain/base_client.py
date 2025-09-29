@@ -13,6 +13,19 @@ logger = logging.getLogger(__name__)
 class BaseClient:
     """Production Base client with real Web3 connection"""
     
+    def __init__(self):
+        """Initialize Base client with Web3 connection"""
+        if settings.BASE_RPC_URL == "memory":
+            # Test mode - use mock provider
+            self.w3 = Web3(EthereumTesterProvider())
+        else:
+            # Production mode - use real RPC
+            self.w3 = Web3(Web3.HTTPProvider(settings.BASE_RPC_URL))
+        
+        if not self.w3.is_connected():
+            raise RuntimeError(f"Failed to connect to Base network: {settings.BASE_RPC_URL}")
+            
+        logger.info(f"Base client initialized with {settings.BASE_RPC_URL}")
         
     def get_balance(self, address: str) -> float:
         """Get ETH balance for address"""

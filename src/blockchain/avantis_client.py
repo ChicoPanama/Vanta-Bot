@@ -34,8 +34,12 @@ class AvantisClient:
         
         # Initialize contracts
         if settings.AVANTIS_TRADING_CONTRACT:
+            try:
+                checksum = self.base_client.w3.to_checksum_address(settings.AVANTIS_TRADING_CONTRACT)
+            except Exception:
+                checksum = settings.AVANTIS_TRADING_CONTRACT
             self.trading_contract = self.base_client.w3.eth.contract(
-                address=settings.AVANTIS_TRADING_CONTRACT,
+                address=checksum,
                 abi=self.trading_abi
             )
         else:
@@ -43,8 +47,12 @@ class AvantisClient:
             logger.warning("AVANTIS_TRADING_CONTRACT not configured")
         
         if settings.AVANTIS_VAULT_CONTRACT:
+            try:
+                v_checksum = self.base_client.w3.to_checksum_address(settings.AVANTIS_VAULT_CONTRACT)
+            except Exception:
+                v_checksum = settings.AVANTIS_VAULT_CONTRACT
             self.vault_contract = self.base_client.w3.eth.contract(
-                address=settings.AVANTIS_VAULT_CONTRACT,
+                address=v_checksum,
                 abi=self.vault_abi
             )
         else:
@@ -150,38 +158,64 @@ class AvantisClient:
                 # If validator shape mismatches, proceed with price_dec but log upstream
                 logger.debug("Validator compatibility fallback used for oracle quote")
 
-            # Calculate slippage bounds using normalised Decimal price
-            min_out = self._calculate_min_out(price_dec, side)
-            
-            # Convert to wei (assuming 18 decimals for size)
-            size_wei = int(size * Decimal(10**18))
-            leverage_wei = int(leverage * Decimal(10**18))
-            
-            # Build transaction data
-            if not self.trading_contract:
-                raise ValueError("Trading contract not configured")
-            
-            # Encode function call
-            data = self.trading_contract.encodeABI(
-                fn_name="openPosition",
-                args=[market, size_wei, leverage_wei, side == "long", min_out]
-            )
-            
-            # Build transaction parameters
-            tx_params = {
-                "to": settings.AVANTIS_TRADING_CONTRACT,
-                "data": data,
-                "value": 0  # No ETH value for position opening
-            }
-            
-            # Send transaction using new pipeline
-            tx_hash = await self.base_client.submit(
-                tx_params=tx_params,
-                request_id=request_id
-            )
-            
-            logger.info(f"Position opened: {tx_hash} for {market} {side} {size} @ {leverage}x")
-            return tx_hash
+            # Prefer SDK path to construct correct call data and execute
+            try:
+                from src.services.trading.avantis_executor import (
+                    get_executor,
+                    OrderRequest,
+                )
+                executor = get_executor()
+                order = OrderRequest(
+                    pair=market if "/" in market or "-" in market else f"{market}/USD",
+                    is_long=(side == "long"),
+                    collateral_usdc=float(size),
+                    leverage=float(leverage),
+                    order_type="market",
+                    slippage_pct=float(settings.DEFAULT_SLIPPAGE_PCT),
+                )
+                result = await executor.open_market(order)
+                if result.success and result.tx_hash:
+                    logger.info(
+                        f"Position opened via SDK: {result.tx_hash} for {market} {side} {size} @ {leverage}x"
+                    )
+                    return result.tx_hash
+                else:
+                    raise RuntimeError(result.error or "SDK trade execution failed")
+            except Exception as sdk_err:
+                logger.warning(f"SDK execution path failed, falling back to ABI encoding: {sdk_err}")
+
+                # Calculate slippage bounds using normalised Decimal price
+                min_out = self._calculate_min_out(price_dec, side)
+                
+                # Convert to wei (assuming 18 decimals for size)
+                size_wei = int(size * Decimal(10**18))
+                leverage_wei = int(leverage * Decimal(10**18))
+                
+                # Build transaction data
+                if not self.trading_contract:
+                    raise ValueError("Trading contract not configured")
+                
+                # NOTE: This path is likely to revert if the contract expects a structured Trade input.
+                # It exists as an emergency fallback when the SDK is unavailable.
+                data = self.trading_contract.encodeABI(
+                    fn_name="openTrade",
+                    args=[market, size_wei, leverage_wei, side == "long", min_out]
+                )
+                
+                # Build transaction parameters
+                tx_params = {
+                    "to": settings.AVANTIS_TRADING_CONTRACT,
+                    "data": data,
+                    "value": 0
+                }
+                
+                tx_hash = await self.base_client.submit(
+                    tx_params=tx_params,
+                    request_id=request_id
+                )
+                
+                logger.info(f"Position opened (fallback): {tx_hash} for {market} {side} {size} @ {leverage}x")
+                return tx_hash
             
         except Exception as e:
             logger.error(f"Error opening position: {e}")
@@ -272,7 +306,7 @@ class AvantisClient:
     # ADVANCED AVANTIS SDK COMPATIBLE FEATURES
     # ========================================
     
-    def set_take_profit_stop_loss(self, user_address: str, private_key: str, 
+    async def set_take_profit_stop_loss(self, user_address: str, private_key: str, 
                                  position_id: int, tp_price: float, sl_price: float):
         """Set Take Profit and Stop Loss using Avantis SDK build_trade_tp_sl_update_tx method"""
         try:
@@ -301,7 +335,7 @@ class AvantisClient:
             logger.error(f"Error setting TP/SL: {e}")
             raise e
     
-    def update_position_leverage(self, user_address: str, private_key: str, 
+    async def update_position_leverage(self, user_address: str, private_key: str, 
                                 position_id: int, new_leverage: int):
         """Update position leverage using Avantis SDK"""
         try:
@@ -330,7 +364,7 @@ class AvantisClient:
             logger.error(f"Error updating leverage: {e}")
             raise e
     
-    def partial_close_position(self, user_address: str, private_key: str, 
+    async def partial_close_position(self, user_address: str, private_key: str, 
                               position_id: int, close_percentage: float):
         """Partially close position using Avantis SDK"""
         try:

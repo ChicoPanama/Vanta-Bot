@@ -6,7 +6,7 @@ from typing import Optional
 from web3 import Web3
 
 from .signers import LocalPrivateKeySigner, KmsSigner
-from .base import Signer
+from .signers.base import Signer
 
 logger = logging.getLogger(__name__)
 
