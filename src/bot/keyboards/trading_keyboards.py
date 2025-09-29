@@ -164,7 +164,7 @@ def get_risk_management_keyboard():
         [InlineKeyboardButton("🎯 Position Sizing", callback_data="position_sizing"),
          InlineKeyboardButton("📊 Risk Metrics", callback_data="risk_metrics")],
         [InlineKeyboardButton("⚖️ Leverage Limits", callback_data="leverage_limits"),
-         InlineKeyboardButton("🚫 Stop Loss Rules", callback_data="sl_rules")],
+         InlineKeyboardButton("🚫 Stop Loss Rules", callback_data="stop_loss_rules")],
         [InlineKeyboardButton("🔙 Back", callback_data="user_type_advanced")]
     ]
     return InlineKeyboardMarkup(keyboard)
@@ -240,152 +240,12 @@ def get_tp_sl_keyboard(position_id: int):
     return InlineKeyboardMarkup(keyboard)
 
 
-# User Type Selection Keyboards
-def get_user_type_keyboard():
-    """Get user type selection keyboard"""
-    keyboard = [
-        [InlineKeyboardButton("🟢 Simple Trader", callback_data="user_type_simple"),
-         InlineKeyboardButton("🔴 Advanced Trader", callback_data="user_type_advanced")],
-        [InlineKeyboardButton("ℹ️ Learn More", callback_data="user_type_info")]
-    ]
-    return InlineKeyboardMarkup(keyboard)
-
-def get_simple_trading_keyboard():
-    """Get simple trading keyboard for beginners"""
-    keyboard = [
-        [InlineKeyboardButton("⚡ Quick Trade BTC", callback_data="quick_BTC"),
-         InlineKeyboardButton("⚡ Quick Trade ETH", callback_data="quick_ETH")],
-        [InlineKeyboardButton("⚡ Quick Trade SOL", callback_data="quick_SOL"),
-         InlineKeyboardButton("⚡ Quick Trade AVAX", callback_data="quick_AVAX")],
-        [InlineKeyboardButton("💰 Wallet", callback_data="wallet"),
-         InlineKeyboardButton("📈 Positions", callback_data="positions")],
-        [InlineKeyboardButton("🏦 Portfolio", callback_data="portfolio"),
-         InlineKeyboardButton("⚙️ Settings", callback_data="settings")],
-        [InlineKeyboardButton("🔴 Switch to Advanced", callback_data="switch_to_advanced")]
-    ]
-    return InlineKeyboardMarkup(keyboard)
-
-def get_advanced_trading_keyboard():
-    """Get advanced trading keyboard for professionals"""
-    keyboard = [
-        [InlineKeyboardButton("📋 Advanced Orders", callback_data="advanced_orders"),
-         InlineKeyboardButton("🔄 Position Management", callback_data="position_mgmt")],
-        [InlineKeyboardButton("🛡️ Risk Management", callback_data="risk_mgmt"),
-         InlineKeyboardButton("📊 Analytics", callback_data="analytics")],
-        [InlineKeyboardButton("📈 Market Data", callback_data="market_data"),
-         InlineKeyboardButton("🔔 Alerts", callback_data="alerts")],
-        [InlineKeyboardButton("💰 Wallet", callback_data="wallet"),
-         InlineKeyboardButton("📈 Positions", callback_data="positions")],
-        [InlineKeyboardButton("🏦 Portfolio", callback_data="portfolio"),
-         InlineKeyboardButton("⚙️ Advanced Settings", callback_data="advanced_settings")],
-        [InlineKeyboardButton("🟢 Switch to Simple", callback_data="switch_to_simple")]
-    ]
-    return InlineKeyboardMarkup(keyboard)
-
-# Advanced Trading Keyboards
-def get_advanced_orders_keyboard():
-    """Get advanced orders keyboard"""
-    keyboard = [
-        [InlineKeyboardButton("📊 Market Order", callback_data="order_market"),
-         InlineKeyboardButton("⏰ Limit Order", callback_data="order_limit")],
-        [InlineKeyboardButton("🛑 Stop Order", callback_data="order_stop"),
-         InlineKeyboardButton("📈 Conditional Order", callback_data="order_conditional")],
-        [InlineKeyboardButton("🔙 Back", callback_data="advanced_trading")]
-    ]
-    return InlineKeyboardMarkup(keyboard)
-
-def get_position_management_keyboard():
-    """Get position management keyboard"""
-    keyboard = [
-        [InlineKeyboardButton("🔄 Close All Positions", callback_data="close_all"),
-         InlineKeyboardButton("🟢 Close Profitable", callback_data="close_profitable")],
-        [InlineKeyboardButton("🔴 Close Losing", callback_data="close_losing"),
-         InlineKeyboardButton("📊 Partial Close", callback_data="partial_close")],
-        [InlineKeyboardButton("🎯 Set TP/SL", callback_data="set_tp_sl"),
-         InlineKeyboardButton("⚖️ Update Leverage", callback_data="update_leverage")],
-        [InlineKeyboardButton("🔙 Back", callback_data="advanced_trading")]
-    ]
-    return InlineKeyboardMarkup(keyboard)
-
-def get_risk_management_keyboard():
-    """Get risk management keyboard"""
-    keyboard = [
-        [InlineKeyboardButton("📊 Portfolio Risk", callback_data="portfolio_risk"),
-         InlineKeyboardButton("📉 Max Drawdown", callback_data="max_drawdown")],
-        [InlineKeyboardButton("🎯 Position Sizing", callback_data="position_sizing"),
-         InlineKeyboardButton("📊 Risk Metrics", callback_data="risk_metrics")],
-        [InlineKeyboardButton("⚖️ Leverage Limits", callback_data="leverage_limits"),
-         InlineKeyboardButton("🚫 Stop Loss Rules", callback_data="stop_loss_rules")],
-        [InlineKeyboardButton("🔙 Back", callback_data="advanced_trading")]
-    ]
-    return InlineKeyboardMarkup(keyboard)
-
-def get_analytics_keyboard():
-    """Get analytics keyboard"""
-    keyboard = [
-        [InlineKeyboardButton("📈 Performance", callback_data="performance"),
-         InlineKeyboardButton("📊 Trade History", callback_data="trade_history")],
-        [InlineKeyboardButton("📉 Win Rate", callback_data="win_rate"),
-         InlineKeyboardButton("💰 PnL Analysis", callback_data="pnl_analysis")],
-        [InlineKeyboardButton("📊 Portfolio Metrics", callback_data="portfolio_metrics"),
-         InlineKeyboardButton("🎯 Success Rate", callback_data="success_rate")],
-        [InlineKeyboardButton("🔙 Back", callback_data="advanced_trading")]
-    ]
-    return InlineKeyboardMarkup(keyboard)
-
-def get_market_data_keyboard():
-    """Get market data keyboard"""
-    keyboard = [
-        [InlineKeyboardButton("📊 Real-time Prices", callback_data="realtime_prices"),
-         InlineKeyboardButton("📈 Price History", callback_data="price_history")],
-        [InlineKeyboardButton("📊 Market Overview", callback_data="market_overview"),
-         InlineKeyboardButton("📈 Asset Details", callback_data="asset_details")],
-        [InlineKeyboardButton("🔙 Back", callback_data="advanced_trading")]
-    ]
-    return InlineKeyboardMarkup(keyboard)
-
-def get_alerts_keyboard():
-    """Get alerts keyboard"""
-    keyboard = [
-        [InlineKeyboardButton("🔔 Price Alerts", callback_data="price_alerts"),
-         InlineKeyboardButton("📊 Position Alerts", callback_data="position_alerts")],
-        [InlineKeyboardButton("⚡ PnL Alerts", callback_data="pnl_alerts"),
-         InlineKeyboardButton("🚨 Risk Alerts", callback_data="risk_alerts")],
-        [InlineKeyboardButton("⚙️ Alert Settings", callback_data="alert_settings"),
-         InlineKeyboardButton("📋 Alert History", callback_data="alert_history")],
-        [InlineKeyboardButton("🔙 Back", callback_data="advanced_trading")]
-    ]
-    return InlineKeyboardMarkup(keyboard)
-
-def get_advanced_settings_keyboard():
-    """Get advanced settings keyboard"""
-    keyboard = [
-        [InlineKeyboardButton("🎯 Trading Preferences", callback_data="trading_preferences"),
-         InlineKeyboardButton("🛡️ Risk Settings", callback_data="risk_settings")],
-        [InlineKeyboardButton("🔔 Notifications", callback_data="notifications"),
-         InlineKeyboardButton("📊 Dashboard", callback_data="dashboard")],
-        [InlineKeyboardButton("🔐 Security", callback_data="security"),
-         InlineKeyboardButton("📈 API Settings", callback_data="api_settings")],
-        [InlineKeyboardButton("🔙 Back", callback_data="advanced_trading")]
-    ]
-    return InlineKeyboardMarkup(keyboard)
-
-def get_tp_sl_keyboard(position_id: int):
-    """Get TP/SL keyboard for specific position"""
-    keyboard = [
-        [InlineKeyboardButton("🎯 Set Take Profit", callback_data=f"set_tp_{position_id}"),
-         InlineKeyboardButton("🛑 Set Stop Loss", callback_data=f"set_sl_{position_id}")],
-        [InlineKeyboardButton("🎯 Set Both TP/SL", callback_data=f"set_both_{position_id}"),
-         InlineKeyboardButton("❌ Remove TP/SL", callback_data=f"remove_tp_sl_{position_id}")],
-        [InlineKeyboardButton("🔙 Back", callback_data="position_mgmt")]
-    ]
-    return InlineKeyboardMarkup(keyboard)
 
 def get_quick_trade_keyboard():
     """Get quick trade keyboard for simple users"""
     keyboard = [
         [InlineKeyboardButton("🟢 LONG", callback_data="quick_long"),
          InlineKeyboardButton("🔴 SHORT", callback_data="quick_short")],
-        [InlineKeyboardButton("🔙 Back", callback_data="simple_trading")]
+        [InlineKeyboardButton("🔙 Back", callback_data="user_type_simple")]
     ]
     return InlineKeyboardMarkup(keyboard)
