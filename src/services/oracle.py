@@ -31,7 +31,10 @@ class OracleSource:
 
 
 class MockOracleSource(OracleSource):
-    """Mock oracle source for testing ONLY - NEVER use in production."""
+    """
+    TEST ONLY — DO NOT USE IN PRODUCTION PATHS.
+    This class introduces randomness and must be imported only in tests or scripts.
+    """
     
     def __init__(self, name: str, base_price: Decimal = Decimal("50000")):
         self.name = name

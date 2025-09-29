@@ -3,7 +3,7 @@ requires = ["setuptools>=61.0", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "avantis-telegram-bot"
+name = "vantabot"
 version = "2.1.0"
 description = "Production-ready Avantis trading bot with layered architecture"
 authors = [
@@ -11,7 +11,7 @@ authors = [
 ]
 license = {text = "MIT"}
 readme = "README.md"
-requires-python = ">=3.9"
+requires-python = "==3.11.*"
 classifiers = [
     "Development Status :: 5 - Production/Stable",
     "Intended Audience :: Financial and Insurance Industry",
@@ -57,12 +57,14 @@ dev = [
 ]
 
 [project.scripts]
+vantabot = "vantabot.__main__:main"
 avantis-open-trade = "src.cli.open_trade:main"
 avantis-preflight = "src.cli.preflight:main"
 avantis-monitor = "src.cli.monitor_unpaused:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]
+include = ["vantabot*"]
 
 [tool.black]
 line-length = 88
@@ -118,7 +120,7 @@ ensure_newline_before_comments = true
 line_length = 88
 
 [tool.mypy]
-python_version = "3.9"
+python_version = "3.11"
 warn_return_any = true
 warn_unused_configs = true
 disallow_untyped_defs = true
