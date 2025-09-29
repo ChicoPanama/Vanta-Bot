@@ -6,7 +6,8 @@ from src.blockchain.avantis_client import avantis_client
 from src.bot.keyboards.trading_keyboards import (
     get_advanced_trading_keyboard, get_position_management_keyboard,
     get_risk_management_keyboard, get_analytics_keyboard, get_market_data_keyboard,
-    get_alerts_keyboard, get_advanced_settings_keyboard, get_tp_sl_keyboard
+    get_alerts_keyboard, get_advanced_settings_keyboard, get_tp_sl_keyboard,
+    get_advanced_orders_keyboard
 )
 import logging
 
@@ -447,3 +448,94 @@ PnL: {pnl_emoji} ${trade.pnl:,.2f}
     except Exception as e:
         logger.error(f"Error in trade_history: {e}")
         await query.answer("❌ Error getting trade history")
+
+
+# ---------- Placeholder handlers for advanced submenu actions ----------
+
+async def order_market_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    q = update.callback_query
+    await q.answer()
+    await q.edit_message_text(
+        "📋 Market Order — Coming soon.\n\nUse /a_quote or /trade for now.",
+        parse_mode='Markdown', reply_markup=get_advanced_orders_keyboard()
+    )
+
+async def order_limit_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    q = update.callback_query
+    await q.answer()
+    await q.edit_message_text(
+        "⏰ Limit Order — Coming soon.",
+        parse_mode='Markdown', reply_markup=get_advanced_orders_keyboard()
+    )
+
+async def order_stop_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    q = update.callback_query
+    await q.answer()
+    await q.edit_message_text(
+        "🛑 Stop Order — Coming soon.",
+        parse_mode='Markdown', reply_markup=get_advanced_orders_keyboard()
+    )
+
+async def order_conditional_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    q = update.callback_query
+    await q.answer()
+    await q.edit_message_text(
+        "📈 Conditional Order — Coming soon.",
+        parse_mode='Markdown', reply_markup=get_advanced_orders_keyboard()
+    )
+
+async def max_drawdown_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    q = update.callback_query; await q.answer()
+    await q.edit_message_text("📉 Max Drawdown — Coming soon.", parse_mode='Markdown', reply_markup=get_risk_management_keyboard())
+
+async def risk_metrics_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    q = update.callback_query; await q.answer()
+    await q.edit_message_text("📊 Risk Metrics — Coming soon.", parse_mode='Markdown', reply_markup=get_risk_management_keyboard())
+
+async def leverage_limits_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    q = update.callback_query; await q.answer()
+    await q.edit_message_text("⚖️ Leverage Limits — Coming soon.", parse_mode='Markdown', reply_markup=get_risk_management_keyboard())
+
+async def stop_loss_rules_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    q = update.callback_query; await q.answer()
+    await q.edit_message_text("🚫 Stop Loss Rules — Coming soon.", parse_mode='Markdown', reply_markup=get_risk_management_keyboard())
+
+async def realtime_prices_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    q = update.callback_query; await q.answer()
+    await q.edit_message_text("📊 Real-time Prices — Coming soon.", parse_mode='Markdown', reply_markup=get_market_data_keyboard())
+
+async def price_history_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    q = update.callback_query; await q.answer()
+    await q.edit_message_text("📈 Price History — Coming soon.", parse_mode='Markdown', reply_markup=get_market_data_keyboard())
+
+async def market_overview_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    q = update.callback_query; await q.answer()
+    await q.edit_message_text("📊 Market Overview — Coming soon.", parse_mode='Markdown', reply_markup=get_market_data_keyboard())
+
+async def asset_details_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    q = update.callback_query; await q.answer()
+    await q.edit_message_text("📈 Asset Details — Coming soon.", parse_mode='Markdown', reply_markup=get_market_data_keyboard())
+
+async def price_alerts_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    q = update.callback_query; await q.answer()
+    await q.edit_message_text("🔔 Price Alerts — Coming soon.", parse_mode='Markdown', reply_markup=get_alerts_keyboard())
+
+async def position_alerts_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    q = update.callback_query; await q.answer()
+    await q.edit_message_text("📊 Position Alerts — Coming soon.", parse_mode='Markdown', reply_markup=get_alerts_keyboard())
+
+async def pnl_alerts_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    q = update.callback_query; await q.answer()
+    await q.edit_message_text("⚡ PnL Alerts — Coming soon.", parse_mode='Markdown', reply_markup=get_alerts_keyboard())
+
+async def risk_alerts_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    q = update.callback_query; await q.answer()
+    await q.edit_message_text("🚨 Risk Alerts — Coming soon.", parse_mode='Markdown', reply_markup=get_alerts_keyboard())
+
+async def alert_settings_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    q = update.callback_query; await q.answer()
+    await q.edit_message_text("⚙️ Alert Settings — Coming soon.", parse_mode='Markdown', reply_markup=get_alerts_keyboard())
+
+async def alert_history_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    q = update.callback_query; await q.answer()
+    await q.edit_message_text("📋 Alert History — Coming soon.", parse_mode='Markdown', reply_markup=get_alerts_keyboard())

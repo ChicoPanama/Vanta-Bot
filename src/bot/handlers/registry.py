@@ -59,7 +59,10 @@ class HandlerRegistry:
         """Get all conversation handlers"""
         # Trading conversation handler
         trade_conversation = ConversationHandler(
-            entry_points=[CallbackQueryHandler(trading.leverage_selection_handler, pattern="^leverage_")],
+            entry_points=[
+                CallbackQueryHandler(trading.leverage_selection_handler, pattern="^leverage_"),
+                CallbackQueryHandler(trading.quick_confirm_entry, pattern=r"^quick_(long|short)$"),
+            ],
             states={
                 trading.SIZE_INPUT: [MessageHandler(filters.TEXT & ~filters.COMMAND, trading.size_input_handler)],
                 trading.CONFIRM_TRADE: [MessageHandler(filters.TEXT & ~filters.COMMAND, trading.confirm_trade_handler)]
@@ -138,6 +141,50 @@ class CallbackRouter:
         elif callback_data == "advanced_settings":
             await advanced_trading.advanced_settings_handler(update, context)
         
+        # Advanced orders submenu placeholders
+        elif callback_data == "order_market":
+            await advanced_trading.order_market_handler(update, context)
+        elif callback_data == "order_limit":
+            await advanced_trading.order_limit_handler(update, context)
+        elif callback_data == "order_stop":
+            await advanced_trading.order_stop_handler(update, context)
+        elif callback_data == "order_conditional":
+            await advanced_trading.order_conditional_handler(update, context)
+        
+        # Risk submenu placeholders
+        elif callback_data == "max_drawdown":
+            await advanced_trading.max_drawdown_handler(update, context)
+        elif callback_data == "risk_metrics":
+            await advanced_trading.risk_metrics_handler(update, context)
+        elif callback_data == "leverage_limits":
+            await advanced_trading.leverage_limits_handler(update, context)
+        elif callback_data == "stop_loss_rules":
+            await advanced_trading.stop_loss_rules_handler(update, context)
+        
+        # Market data submenu placeholders
+        elif callback_data == "realtime_prices":
+            await advanced_trading.realtime_prices_handler(update, context)
+        elif callback_data == "price_history":
+            await advanced_trading.price_history_handler(update, context)
+        elif callback_data == "market_overview":
+            await advanced_trading.market_overview_handler(update, context)
+        elif callback_data == "asset_details":
+            await advanced_trading.asset_details_handler(update, context)
+        
+        # Alerts submenu placeholders
+        elif callback_data == "price_alerts":
+            await advanced_trading.price_alerts_handler(update, context)
+        elif callback_data == "position_alerts":
+            await advanced_trading.position_alerts_handler(update, context)
+        elif callback_data == "pnl_alerts":
+            await advanced_trading.pnl_alerts_handler(update, context)
+        elif callback_data == "risk_alerts":
+            await advanced_trading.risk_alerts_handler(update, context)
+        elif callback_data == "alert_settings":
+            await advanced_trading.alert_settings_handler(update, context)
+        elif callback_data == "alert_history":
+            await advanced_trading.alert_history_handler(update, context)
+        
         # Trading flow handlers
         elif callback_data.startswith("trade_"):
             await trading.trade_direction_handler(update, context)
@@ -148,7 +195,13 @@ class CallbackRouter:
         elif callback_data.startswith("leverage_"):
             await trading.leverage_selection_handler(update, context)
         elif callback_data.startswith("quick_"):
-            await self._handle_quick_trade(update, context, callback_data)
+            # Let ConversationHandler capture quick_long/quick_short.
+            # Handle only asset selection buttons here.
+            if callback_data.startswith(("quick_BTC", "quick_ETH", "quick_SOL", "quick_AVAX")):
+                await self._handle_quick_trade(update, context, callback_data)
+            else:
+                # Conversation entry will handle quick_long/quick_short
+                return
         
         # Settings sub-handlers
         elif callback_data.startswith("settings_"):
@@ -195,19 +248,7 @@ class CallbackRouter:
                 parse_mode='Markdown',
                 reply_markup=get_quick_trade_keyboard()
             )
-        elif callback_data.startswith(("quick_long", "quick_short")):
-            # Handle quick trade direction
-            direction = "LONG" if "long" in callback_data else "SHORT"
-            context.user_data['quick_direction'] = direction
-            await query.edit_message_text(
-                f"📊 **Quick Trade Setup**\n\n"
-                f"Asset: {context.user_data.get('quick_asset', 'BTC')}\n"
-                f"Direction: {direction}\n"
-                f"Leverage: 10x (recommended)\n"
-                f"Size: $100 (recommended)\n\n"
-                f"Type 'confirm' to execute or 'cancel' to abort:",
-                parse_mode='Markdown'
-            )
+        # quick_long/quick_short are handled by ConversationHandler
     
     async def _handle_settings(self, update: Update, context: ContextTypes.DEFAULT_TYPE, callback_data: str):
         """Handle settings callbacks"""

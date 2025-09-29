@@ -115,6 +115,50 @@ async def leverage_selection_handler(update: Update, context: ContextTypes.DEFAU
     
     return SIZE_INPUT
 
+
+async def quick_confirm_entry(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Entry point for Quick Trade confirmations.
+
+    Trigger: callback_data matches ^quick_(long|short)$
+    Sets default leverage/size and reuses CONFIRM_TRADE state.
+    """
+    query = update.callback_query
+    await query.answer()
+
+    user_id = update.effective_user.id
+    # Ensure session exists
+    if user_id not in trading_sessions:
+        trading_sessions[user_id] = {}
+
+    # Asset previously selected from quick_BTC/ETH/... branch
+    asset = context.user_data.get('quick_asset', 'BTC')
+    trading_sessions[user_id]['asset'] = asset
+
+    # Direction from callback
+    direction = 'LONG' if 'quick_long' in query.data else 'SHORT'
+    trading_sessions[user_id]['direction'] = direction
+
+    # Apply recommended defaults
+    trading_sessions[user_id]['leverage'] = DEFAULT_LEVERAGE
+    trading_sessions[user_id]['size'] = DEFAULT_QUICK_TRADE_SIZE
+
+    # Build confirm message
+    size = trading_sessions[user_id]['size']
+    lev = trading_sessions[user_id]['leverage']
+    notional = float(size) * float(lev)
+    confirm_text = (
+        f"✅ **Confirm Quick Trade**\n\n"
+        f"Asset: {asset}\n"
+        f"Direction: {direction}\n"
+        f"Size: ${float(size):,.2f} USDC\n"
+        f"Leverage: {lev}x\n"
+        f"Notional: ${notional:,.2f}\n\n"
+        f"Type 'confirm' to execute or 'cancel' to abort."
+    )
+
+    await query.edit_message_text(confirm_text, parse_mode='Markdown')
+    return CONFIRM_TRADE
+
 async def size_input_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Handle position size input"""
     try:

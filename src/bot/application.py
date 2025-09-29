@@ -118,6 +118,23 @@ class BotApplication:
         except Exception as e:
             logger.warning(f"Failed to register Phase 6 handlers: {e}")
         
+        # Register additional admin commands (/copy, /emergency)
+        try:
+            from src.bot.handlers.admin_commands import admin_handlers as admin_cmd_handlers
+            # Add only /copy and /emergency to avoid conflicting /status routes
+            for h in admin_cmd_handlers:
+                try:
+                    if getattr(h, 'commands', None):
+                        cmds = set(h.commands)
+                        if 'copy' in cmds or 'emergency' in cmds:
+                            self.app.add_handler(h)
+                except Exception:
+                    # Fallback: add handler blindly if we can't introspect
+                    self.app.add_handler(h)
+            logger.info("Additional admin commands registered (/copy, /emergency)")
+        except Exception as e:
+            logger.warning(f"Failed to register admin_commands: {e}")
+        
         # Register Phase 7 handlers (onboarding & user settings)
         try:
             from src.bot.handlers.onboarding_handlers import register as register_onboarding_handlers
@@ -142,6 +159,15 @@ class BotApplication:
             register_copy_handlers(self.app)
             for handler in alfa_handlers:
                 self.app.add_handler(handler)
+            # Also register copy status/commands (\"/status\", \"/follow\", etc.)
+            try:
+                from src.bot.handlers.copy_trading_commands import copy_trading_handlers
+                for h in copy_trading_handlers:
+                    # Avoid re-registering handlers that already exist
+                    self.app.add_handler(h)
+                logger.info("Copy-trading command handlers registered")
+            except Exception as ce:
+                logger.warning(f"Failed to register copy_trading_commands: {ce}")
             copy_init()  # Initialize copy-trading database
             logger.info("Phase 8 handlers registered successfully")
         except Exception as e:
