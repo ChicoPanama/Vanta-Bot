@@ -1,10 +1,10 @@
 from typing import Dict, Any, Optional
+from decimal import Decimal
 from telegram import Update
 from telegram.ext import ContextTypes, ConversationHandler, MessageHandler, filters
 
 from src.database.operations import db
 from src.blockchain.wallet_manager import wallet_manager
-from src.blockchain.avantis_client import avantis_client
 from src.bot.keyboards.trading_keyboards import (
     get_trading_keyboard, get_crypto_assets_keyboard, get_forex_assets_keyboard,
     get_leverage_keyboard, get_main_menu_keyboard
@@ -17,6 +17,9 @@ from src.bot.constants import (
 )
 from src.utils.validators import validate_trade_size, validate_leverage
 from src.utils.logging import get_logger
+from src.services.trading.execution_service import get_execution_service
+from src.services.trading.trade_drafts import TradeDraft
+from src.config.settings import settings
 
 logger = get_logger(__name__)
 user_middleware = UserMiddleware()
@@ -195,37 +198,51 @@ async def execute_trade(update: Update, user_id: int) -> None:
             await update.message.reply_text(error_msg)
             return
         
-        # Decrypt private key
-        private_key = wallet_manager.decrypt_private_key(db_user.encrypted_private_key)
-        
-        # Execute trade on Avantis
-        is_long = session['direction'] == 'LONG'
-        tx_hash = avantis_client.open_position(
-            db_user.wallet_address,
-            private_key,
-            session['asset'],
-            session['size'],
-            is_long,
-            session['leverage']
-        )
-        
-        # Save position to database
-        await db.create_position(
+        # Migrate to unified ExecutionService path (DRY/LIVE aware)
+        svc = get_execution_service(settings)
+        # Map simple asset (e.g., 'BTC') to a default pair if needed
+        pair = session['asset']
+        if '/' not in pair:
+            pair = f"{pair}/USD"
+        draft = TradeDraft(
             user_id=db_user.id,
-            symbol=session['asset'],
+            pair=pair,
             side=session['direction'],
-            size=session['size'],
-            leverage=session['leverage']
+            collateral_usdc=Decimal(str(session['size'])),
+            leverage=Decimal(str(session['leverage'])),
         )
-        
+        ok, msg, res = await svc.execute_open(draft)
+
+        if not ok:
+            await update.message.reply_text(
+                f"❌ Trade execution failed: {msg}",
+                reply_markup=get_main_menu_keyboard()
+            )
+            return
+
+        tx_hash = res.get('tx_hash') if isinstance(res, dict) else None
+
+        # Persist a lightweight record for UI (optional; legacy local model)
+        try:
+            await db.create_position(
+                user_id=db_user.id,
+                symbol=pair,
+                side=session['direction'],
+                size=session['size'],
+                leverage=session['leverage']
+            )
+        except Exception:
+            # Non-fatal: execution already succeeded; DB write best-effort
+            pass
+
         success_text = TRADE_SUCCESS_MESSAGE.format(
-            tx_hash=tx_hash,
-            asset=session['asset'],
+            tx_hash=(tx_hash or 'DRY-MODE'),
+            asset=pair,
             direction=session['direction'],
             size=session['size'],
             leverage=session['leverage']
         )
-        
+
         await update.message.reply_text(
             success_text,
             parse_mode='Markdown',
