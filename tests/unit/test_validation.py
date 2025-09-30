@@ -258,7 +258,7 @@ class TestRiskLimitsValidation:
         """Test position size risk validation."""
         params = HumanTradeParams(
             collateral_usdc=Decimal("100"),
-            leverage_x=Decimal("1000"),  # Very high leverage
+            leverage_x=Decimal("1001"),  # Very high leverage - exceeds limit
             slippage_pct=Decimal("1"),
             pair_index=0,
             is_long=True,
@@ -274,6 +274,7 @@ class TestRiskLimitsValidation:
 
         current_balance = Decimal("10000")
 
+        # Position size = 100 * 1001 = 100,100 > 100,000 limit
         errors = validate_risk_limits(params, risk_limits, current_balance)
         assert any("Position size" in error for error in errors)
 
