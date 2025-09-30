@@ -12,6 +12,6 @@ class TestWebhookHealth:
         """Test health endpoint returns ok."""
         client = TestClient(app)
         response = client.get("/health")
-        
+
         assert response.status_code == 200
         assert response.json() == {"status": "ok", "service": "vanta-bot-signals"}

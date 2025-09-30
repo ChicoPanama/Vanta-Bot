@@ -14,6 +14,7 @@ from src.bot.handlers.base import register_base
 from src.bot.handlers.market_handlers import register_markets
 from src.bot.handlers.ops_handlers import register_ops
 from src.bot.handlers.positions_handlers import register_positions
+from src.bot.handlers.risk_handlers import register_risk
 from src.bot.handlers.trade_handlers import register_trades
 from src.bot.handlers.wallet_handlers import register_wallet
 from src.bot.middlewares.auth import user_context_middleware
@@ -65,6 +66,7 @@ def build_app():
     register_positions(app, svc)
     register_trades(app, svc)
     register_ops(app, svc)
+    register_risk(app, svc)
 
     logger.info("✅ Telegram application built successfully")
     return app

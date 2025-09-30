@@ -5,6 +5,7 @@ from src.signals.rules import Decision, evaluate_close, evaluate_open
 
 class DummyDB:
     """Dummy database for testing."""
+
     pass
 
 
