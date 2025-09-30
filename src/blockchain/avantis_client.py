@@ -470,12 +470,28 @@ class AvantisClient:
             return None
 
     def get_real_time_prices(self, symbols: list):
-        """Get real-time prices using Avantis SDK price feeds"""
+        """Get real-time prices using Avantis SDK price feeds
+        
+        WARNING: This method contains mock data and should NOT be used in production.
+        Production systems MUST use PriceAggregator with ChainlinkAdapter/PythAdapter.
+        
+        Raises:
+            RuntimeError: If called in production environment
+        """
+        import os
+        
+        # SECURITY: Block mock prices in production
+        if os.getenv("ENVIRONMENT", "development").lower() in ("production", "prod", "staging"):
+            raise RuntimeError(
+                "Mock price method not available in production. "
+                "Use PriceAggregator with ChainlinkAdapter/PythAdapter instead."
+            )
+        
         try:
             # This would use the actual Avantis SDK method
             # return self.sdk.get_price_feeds(symbols)
 
-            # For now, return mock prices
+            # For now, return mock prices (DEVELOPMENT ONLY)
             prices = {}
             for symbol in symbols:
                 if symbol == "BTC":

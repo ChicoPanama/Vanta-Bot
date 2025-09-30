@@ -1,54 +1,62 @@
-"""Signer factory for creating appropriate signer based on configuration."""
+"""DEPRECATED: Legacy signer factory.
+
+⚠️  DEPRECATION WARNING: This module is deprecated and should not be used.
+Use src.blockchain.signers.factory.get_signer() instead.
+
+This file is kept temporarily for backwards compatibility but will be removed
+in a future version. All imports should use:
+
+    from src.blockchain.signers.factory import get_signer
+
+Reason for deprecation:
+- Duplicate factory causes confusion
+- Settings-based factory in signers.factory is the canonical implementation
+- This legacy version uses direct env vars instead of settings
+
+Migration:
+1. Replace: from src.blockchain.signer_factory import create_signer
+   With:    from src.blockchain.signers.factory import get_signer
+2. Update calls from create_signer(w3) to get_signer(w3)
+3. Remove any remaining references to this module
+"""
 
 import logging
-import os
+import warnings
 from typing import Optional
 
 from web3 import Web3
 
-from .signers import KmsSigner, LocalPrivateKeySigner
-from .signers.base import Signer
-
 logger = logging.getLogger(__name__)
 
+# Issue deprecation warning at module import time
+warnings.warn(
+    "signer_factory is deprecated. Use src.blockchain.signers.factory.get_signer() instead.",
+    DeprecationWarning,
+    stacklevel=2,
+)
 
-def create_signer(web3: Web3) -> Optional[Signer]:
-    """Create signer based on environment configuration.
+
+def create_signer(web3: Web3) -> Optional["Signer"]:  # type: ignore
+    """DEPRECATED: Create signer based on environment configuration.
+
+    ⚠️  This function is deprecated. Use get_signer() from signers.factory instead.
 
     Args:
         web3: Web3 instance
 
     Returns:
-        Configured signer or None if no signer should be used
+        Configured signer
+
+    Raises:
+        DeprecationWarning: Always warns about deprecation
+        ImportError: To force migration to new factory
     """
-    signer_backend = os.getenv("SIGNER_BACKEND", "local").lower()
-
-    if signer_backend == "local":
-        private_key = os.getenv("TRADER_PRIVATE_KEY")
-        if not private_key:
-            logger.warning("TRADER_PRIVATE_KEY not set - transactions will fail")
-            return None
-
-        try:
-            return LocalPrivateKeySigner(private_key, web3)
-        except Exception as e:
-            logger.error(f"Failed to create local signer: {e}")
-            raise
-
-    elif signer_backend == "kms":
-        key_id = os.getenv("AWS_KMS_KEY_ID")
-        region = os.getenv("AWS_REGION", "us-east-1")
-
-        if not key_id:
-            logger.warning("AWS_KMS_KEY_ID not set - transactions will fail")
-            return None
-
-        try:
-            return KmsSigner(key_id, region, web3)
-        except Exception as e:
-            logger.error(f"Failed to create KMS signer: {e}")
-            raise
-
-    else:
-        logger.warning(f"Unknown signer backend: {signer_backend}")
-        return None
+    logger.error(
+        "create_signer() from signer_factory.py is deprecated. "
+        "Use get_signer() from src.blockchain.signers.factory instead."
+    )
+    raise ImportError(
+        "Legacy signer_factory is deprecated. "
+        "Import from src.blockchain.signers.factory instead:\n"
+        "  from src.blockchain.signers.factory import get_signer"
+    )

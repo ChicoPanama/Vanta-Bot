@@ -1,9 +1,10 @@
 """Avantis integration service facade (Phase 3)."""
 
 import logging
+import time
 from dataclasses import dataclass
+from hashlib import sha256
 from typing import Optional
-from uuid import uuid4
 
 from sqlalchemy.orm import Session
 from web3 import Web3
@@ -18,6 +19,38 @@ from .calldata import encode_close, encode_open
 from .units import to_normalized
 
 logger = logging.getLogger(__name__)
+
+
+def make_intent_key(
+    user_id: int,
+    action: str,
+    symbol: str,
+    side: str | None,
+    qty_1e6: int | None,
+    price_1e6: int | None = None,
+    bucket_s: int = 1,
+) -> str:
+    """Generate deterministic idempotency key for transaction intent.
+    
+    Args:
+        user_id: User ID
+        action: "open" or "close"
+        symbol: Market symbol
+        side: "LONG" or "SHORT" (None for close)
+        qty_1e6: Quantity in 1e6 scaled int
+        price_1e6: Price in 1e6 (optional, for limit orders)
+        bucket_s: Time bucket in seconds (default 1s to prevent spam)
+    
+    Returns:
+        Deterministic hash string suitable for idempotency key
+        
+    Note:
+        This prevents duplicate transactions by generating the same key
+        for identical requests within the time bucket.
+    """
+    tsb = int(time.time() // bucket_s)
+    raw = f"{user_id}|{action}|{symbol}|{side or ''}|{qty_1e6 or 0}|{price_1e6 or 0}|{tsb}"
+    return sha256(raw.encode()).hexdigest()
 
 
 @dataclass
@@ -126,8 +159,14 @@ class AvantisService:
         # Encode calldata
         to_addr, data = encode_open(self.w3, market.perpetual, order, market.market_id)
 
-        # Execute via orchestrator
-        intent_key = f"open:{user_id}:{symbol}:{uuid4()}"
+        # Execute via orchestrator with deterministic idempotency key
+        intent_key = make_intent_key(
+            user_id=user_id,
+            action="open",
+            symbol=symbol,
+            side=side,
+            qty_1e6=order.size_usd,
+        )
         orch = TxOrchestrator(self.w3, self.db)
 
         logger.info(
@@ -173,8 +212,14 @@ class AvantisService:
             self.w3, market.perpetual, market.market_id, reduce_1e6, slippage_bps
         )
 
-        # Execute via orchestrator
-        intent_key = f"close:{user_id}:{symbol}:{uuid4()}"
+        # Execute via orchestrator with deterministic idempotency key
+        intent_key = make_intent_key(
+            user_id=user_id,
+            action="close",
+            symbol=symbol,
+            side=None,
+            qty_1e6=reduce_1e6,
+        )
         orch = TxOrchestrator(self.w3, self.db)
 
         logger.info(

@@ -669,7 +669,14 @@ class CopyExecutor:
             return 0
 
     async def _get_max_leverage(self, copytrader_id: int) -> float:
-        """Get maximum leverage for a copytrader"""
+        """Get maximum leverage for a copytrader
+        
+        Returns:
+            Maximum leverage from config, defaults to safe 5.0x if not found
+            
+        Note:
+            Safe fallback of 5.0x (was 50.0x). Always prefer explicit config.
+        """
         try:
             acq = await self.db_pool.acquire()
             async with acq as conn:
@@ -680,11 +687,13 @@ class CopyExecutor:
                     copytrader_id,
                 )
 
-                return float(row["max_leverage"]) if row else 50.0
+                # SECURITY: Safe fallback of 5x instead of 50x
+                return float(row["max_leverage"]) if row else 5.0
 
         except Exception as e:
             logger.error(f"Error getting max leverage: {e}")
-            return 50.0
+            # SECURITY: Safe fallback of 5x instead of 50x
+            return 5.0
 
     async def _record_copy_position(
         self, request: CopyTradeRequest, status: CopyStatus, **kwargs

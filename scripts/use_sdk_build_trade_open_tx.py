@@ -22,7 +22,8 @@ os.environ.update(
         "COPY_EXECUTION_MODE": "LIVE",
         "PYTH_PRICE_SERVICE_URL": "https://hermes.pyth.network",
         "CHAINLINK_BASE_URL": "https://api.chain.link/v1",
-        "TRADER_PRIVATE_KEY": "aa3645b7606503e1a3e6081afe67eeb91662d143879f26ac77aedfcc043b1f87",
+        # SECURITY: DO NOT commit private keys! Use environment variable instead.
+        # "TRADER_PRIVATE_KEY": os.getenv("TRADER_PRIVATE_KEY", ""),  # Set via env var
         "AVANTIS_TRADING_CONTRACT": "0x5FF292d70bA9cD9e7CCb313782811b3D7120535f",
     }
 )

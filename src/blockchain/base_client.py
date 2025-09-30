@@ -291,7 +291,7 @@ def get_base_client() -> BaseClient:
     global _CLIENT
     if _CLIENT is None:
         # Create signer based on configuration
-        from .signer_factory import create_signer
+        from .signers.factory import get_signer
 
         # Create a proper Web3 instance with provider
         rpc_url = settings.BASE_RPC_URL
@@ -300,7 +300,7 @@ def get_base_client() -> BaseClient:
         else:
             provider = Web3.HTTPProvider(rpc_url)
         w3 = Web3(provider)
-        signer = create_signer(w3)
+        signer = get_signer(w3)
         _CLIENT = BaseClient(signer)
     return _CLIENT
 
