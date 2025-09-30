@@ -117,3 +117,12 @@ from src.config.settings import settings; from src.services.indexers.avantis_ind
 w3 = Web3(Web3.HTTPProvider(settings.BASE_RPC_URL)); \
 Session = sessionmaker(bind=create_engine(settings.DATABASE_URL.replace('sqlite+aiosqlite:', 'sqlite:'))); \
 print(f'Processed {run_once(w3, Session)} blocks')"
+
+run-bot: ## Run Telegram bot (Phase 5)
+	python -m src.bot.application
+
+bot-lint: ## Lint bot code (Phase 5)
+	ruff check src/bot
+
+bot-test: ## Test bot code (Phase 5)
+	pytest -q tests/bot tests/unit/repositories/test_user_wallets_repo.py

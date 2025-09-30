@@ -157,3 +157,55 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Event decoder stub (needs real Avantis ABI)
 - User wallet binding (TG user → EOA) pending Phase 5
 
+
+## Phase 5: Telegram UX MVP — 2025-09-30
+
+### Added
+- **User wallet binding**:
+  - UserWallet model (TG user ID → EOA mapping)
+  - user_wallets_repo with bind/get operations
+  - Migration: phase5_user_wallets
+- **UI utilities**:
+  - formatting.py: fmt_addr, h1, code, ok, warn, usdc1e6
+  - keyboards.py: Interactive buttons for side, leverage, slippage, confirmation
+- **Middleware**:
+  - User context middleware (adds user.tg_id to context)
+  - Global error handler (user-friendly messages, no stack traces)
+- **Bot handlers**:
+  - /start, /help - Welcome and help messages
+  - /bind, /balance - Wallet binding and balance check
+  - /markets - List available markets with prices
+  - /positions - View user positions (from Phase 4 indexer)
+  - /open - Guided flow: symbol → side → leverage → collateral → slippage → confirm
+  - /close - Guided flow: symbol → reduce amount → slippage → confirm
+- **Bot application**:
+  - Complete bootstrap with service factory
+  - Dependency injection for Web3, DB, AvantisService
+  - All handlers wired and registered
+- **Makefile targets**:
+  - make run-bot: Start Telegram bot
+  - make bot-lint: Lint bot code
+  - make bot-test: Run bot tests
+
+### Integration
+- All trades go through AvantisService → TxOrchestrator (Phase 2)
+- Positions read from Phase 4 repositories + cache
+- No handlers call Web3/SDK directly (clean architecture)
+
+### Tests
+- 10 new tests (100% passing)
+  - 7 UI formatting tests
+  - 3 user_wallets_repo tests
+
+### Documentation
+- Inline docstrings on all handlers
+- User-friendly error messages
+- PHASE5_SUMMARY.md
+
+### User Experience
+- Clean guided flows with buttons
+- Address normalization
+- Wallet binding per TG user
+- Real-time balance and position views
+- Error handling with no stack traces
+

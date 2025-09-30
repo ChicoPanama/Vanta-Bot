@@ -1,66 +1,54 @@
-from __future__ import annotations
-
-import re
+"""Wallet management handlers (Phase 5)."""
 
 from telegram import Update
-from telegram.ext import (
-    CommandHandler,
-    ContextTypes,
-    ConversationHandler,
-    MessageHandler,
-    filters,
-)
+from telegram.ext import Application, CallbackContext, CommandHandler
+from web3 import Web3
 
-from src.services.users.user_prefs import prefs_store
-
-ASK_ADDR = 1
-ADDR_RX = re.compile(r"^0x[a-fA-F0-9]{40}$")
-
-PROMPT = (
-    "🔗 *Link Wallet (optional)*\n"
-    "Send your EVM address (read-only). Example:\n"
-    "`0x1234...abcd`\n\n"
-    "_We do NOT request private keys or signatures._"
-)
+from src.bot.ui.formatting import fmt_addr, h1, ok, warn
+from src.repositories.user_wallets_repo import bind_wallet, get_wallet
 
 
-async def cmd_linkwallet(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.effective_chat.send_message(PROMPT, parse_mode="Markdown")
-    return ASK_ADDR
+def register_wallet(app: Application, svc_factory):
+    """Register wallet command handlers."""
 
+    async def bind_(update: Update, context: CallbackContext):
+        """Handle /bind command."""
+        if not context.args:
+            await update.message.reply_markdown(warn("Usage: /bind 0xYourAddress"))
+            return
 
-async def receive_addr(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    addr = (update.message.text or "").strip()
-    if not ADDR_RX.match(addr):
-        await update.effective_chat.send_message(
-            "That doesn't look like an EVM address. Try again or /cancel."
-        )
-        return ASK_ADDR
-    p = prefs_store().get(update.effective_user.id)
-    p["linked_wallet"] = addr
-    prefs_store().put(update.effective_user.id, p)
-    await update.effective_chat.send_message(
-        f"✅ Linked wallet: `{addr}`", parse_mode="Markdown"
-    )
-    return ConversationHandler.END
+        addr = context.args[0]
+        if not Web3.is_address(addr):
+            await update.message.reply_markdown(warn("Invalid address."))
+            return
 
+        w3, db, svc = svc_factory()
+        try:
+            rec = bind_wallet(db, context.user.tg_id, addr)
+            await update.message.reply_markdown(
+                ok(f"Wallet bound: `{fmt_addr(rec.address)}`"), parse_mode="Markdown"
+            )
+        finally:
+            db.close()
 
-async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.effective_chat.send_message("Cancelled.")
-    return ConversationHandler.END
+    async def balance(update: Update, context: CallbackContext):
+        """Handle /balance command."""
+        w3, db, svc = svc_factory()
+        try:
+            addr = get_wallet(db, context.user.tg_id)
+            if not addr:
+                await update.message.reply_markdown(
+                    warn("No wallet bound. Use /bind <address>.")
+                )
+                return
 
+            wei = w3.eth.get_balance(addr)
+            eth_balance = wei / 1e18
+            await update.message.reply_markdown(
+                h1("Balance") + f"\n{fmt_addr(addr)} • {eth_balance:.6f} ETH"
+            )
+        finally:
+            db.close()
 
-def register(app):
-    app.add_handler(
-        ConversationHandler(
-            entry_points=[CommandHandler("linkwallet", cmd_linkwallet)],
-            states={
-                ASK_ADDR: [
-                    MessageHandler(filters.TEXT & ~filters.COMMAND, receive_addr)
-                ]
-            },
-            fallbacks=[CommandHandler("cancel", cancel)],
-            name="linkwallet",
-            persistent=False,
-        )
-    )
+    app.add_handler(CommandHandler("bind", bind_))
+    app.add_handler(CommandHandler("balance", balance))
