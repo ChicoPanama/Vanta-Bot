@@ -12,7 +12,7 @@ class OpenRequest(BaseModel):
     leverage_x: int = Field(ge=1, le=500)
     slippage_pct: float = Field(ge=0, le=10)
 
-    @field_validator("side")
+    @field_validator("side")  # type: ignore[misc]
     @classmethod
     def validate_side(cls, v: str) -> str:
         """Validate side is LONG or SHORT."""

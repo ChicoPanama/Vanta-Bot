@@ -6,7 +6,7 @@ from web3 import Web3
 class TestCalldataBuilders:
     """Test ABI encoding for Avantis actions."""
 
-    def test_encode_open(self):
+    def test_encode_open(self) -> None:
         """Test openPosition calldata encoding."""
         from src.blockchain.avantis.calldata import encode_open
         from src.blockchain.avantis.units import NormalizedOrder
@@ -24,7 +24,7 @@ class TestCalldataBuilders:
         assert isinstance(data, (bytes, bytearray))
         assert len(data) > 4  # Function selector (4 bytes) + args
 
-    def test_encode_close(self):
+    def test_encode_close(self) -> None:
         """Test closePosition calldata encoding."""
         from src.blockchain.avantis.calldata import encode_close
 

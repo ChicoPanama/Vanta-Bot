@@ -4,7 +4,7 @@
 class TestUnitNormalization:
     """Test single-scaling unit normalization."""
 
-    def test_to_normalized_scaling(self):
+    def test_to_normalized_scaling(self) -> None:
         """Test float to integer conversion with correct scaling."""
         from src.blockchain.avantis.units import to_normalized
 
@@ -19,7 +19,7 @@ class TestUnitNormalization:
         assert order.symbol == "BTC-USD"
         assert order.side == "LONG"
 
-    def test_to_normalized_uppercase(self):
+    def test_to_normalized_uppercase(self) -> None:
         """Test symbol and side are uppercased."""
         from src.blockchain.avantis.units import to_normalized
 
@@ -28,7 +28,7 @@ class TestUnitNormalization:
         assert order.symbol == "BTC-USD"
         assert order.side == "LONG"
 
-    def test_to_normalized_fractional_usdc(self):
+    def test_to_normalized_fractional_usdc(self) -> None:
         """Test fractional USDC amounts."""
         from src.blockchain.avantis.units import to_normalized
 

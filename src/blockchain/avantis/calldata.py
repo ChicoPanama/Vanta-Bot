@@ -20,7 +20,7 @@ def _get_function_selector(abi: dict) -> bytes:
     signature = f"{abi['name']}({inputs})"
 
     # Hash and take first 4 bytes
-    return keccak(text=signature)[:4]
+    return keccak(text=signature)[:4]  # type: ignore[no-any-return]
 
 
 def encode_open(

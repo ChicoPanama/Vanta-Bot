@@ -12,8 +12,8 @@ from src.database.models import Base
 class TestAvantisServiceValidation:
     """Test AvantisService validation logic."""
 
-    @pytest.fixture
-    def db_session(self):
+    @pytest.fixture  # type: ignore[misc]
+    def db_session(self):  # type: ignore[no-untyped-def]
         """Create in-memory SQLite session."""
         engine = create_engine("sqlite:///:memory:")
         Base.metadata.create_all(engine)
@@ -21,8 +21,8 @@ class TestAvantisServiceValidation:
         yield session
         session.close()
 
-    @pytest.fixture
-    def mock_w3(self):
+    @pytest.fixture  # type: ignore[misc]
+    def mock_w3(self):  # type: ignore[no-untyped-def]
         """Mock Web3 instance."""
         w3 = MagicMock()
         w3.eth.chain_id = 8453
@@ -31,12 +31,12 @@ class TestAvantisServiceValidation:
         w3.eth.get_transaction_count.return_value = 5
         return w3
 
-    @pytest.fixture
-    def mock_price_agg(self):
+    @pytest.fixture  # type: ignore[misc]
+    def mock_price_agg(self):  # type: ignore[no-untyped-def]
         """Mock price aggregator."""
         return MagicMock()
 
-    def test_unknown_market_raises(self, db_session, mock_w3, mock_price_agg):
+    def test_unknown_market_raises(self, db_session, mock_w3, mock_price_agg) -> None:  # type: ignore[no-untyped-def]
         """Test that unknown market raises ValueError."""
         from src.blockchain.avantis.service import AvantisService
 
@@ -53,9 +53,9 @@ class TestAvantisServiceValidation:
             )
 
     @patch("src.blockchain.signers.factory.get_signer")
-    def test_below_min_position_raises(
+    def test_below_min_position_raises(  # type: ignore[no-untyped-def]
         self, mock_signer, db_session, mock_w3, mock_price_agg
-    ):
+    ) -> None:
         """Test that position below minimum raises ValueError."""
         from src.blockchain.avantis.service import AvantisService
 
@@ -77,7 +77,7 @@ class TestAvantisServiceValidation:
                 slippage_pct=1.0,
             )
 
-    def test_list_markets(self, db_session, mock_w3, mock_price_agg):
+    def test_list_markets(self, db_session, mock_w3, mock_price_agg) -> None:  # type: ignore[no-untyped-def]
         """Test list_markets returns market info."""
         # Mock price aggregator to return a price
         from src.adapters.price.base import PriceQuote

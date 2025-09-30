@@ -8,7 +8,7 @@ from web3 import Web3
 class TestChainlinkAdapter:
     """Test Chainlink price adapter."""
 
-    def test_get_price_success(self):
+    def test_get_price_success(self) -> None:
         """Test successful price retrieval."""
         from src.adapters.price.chainlink_adapter import ChainlinkAdapter
 
@@ -37,7 +37,7 @@ class TestChainlinkAdapter:
         assert quote.decimals == 8
         assert quote.source == "chainlink"
 
-    def test_get_price_unknown_symbol(self):
+    def test_get_price_unknown_symbol(self) -> None:
         """Test None returned for unknown symbol."""
         from src.adapters.price.chainlink_adapter import ChainlinkAdapter
 
@@ -48,7 +48,7 @@ class TestChainlinkAdapter:
 
         assert quote is None
 
-    def test_get_price_invalid_answer(self):
+    def test_get_price_invalid_answer(self) -> None:
         """Test None returned for invalid (negative) price."""
         from src.adapters.price.chainlink_adapter import ChainlinkAdapter
 
