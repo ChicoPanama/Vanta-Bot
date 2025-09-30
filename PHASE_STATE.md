@@ -1,48 +1,49 @@
 # Phase State Tracker
 
-**Current Phase:** 4
-**Status:** PASSED ✅
+**Current Phase:** 5  
+**Status:** READY_FOR_REVIEW  
 **Last Updated:** 2025-09-30
 
 ---
 
-## Phase 4: Persistence & Indexing — PASSED ✅
+## Phase 5: Telegram UX MVP — READY FOR REVIEW
 
-**Branch:** `feat/phase-4-persistence-indexing` (merged to main)
-**Merge Commit:** `02e5b30`
-**Status:** PASSED ✅
-**Date Promoted:** 2025-09-30
+**Branch:** `feat/phase-5-ux-mvp`  
+**Commit:** `b02630b`  
+**Status:** READY_FOR_REVIEW  
 
 ### Implementation Complete ✅
-- Database models: SyncState, IndexedFill, UserPosition
-- Baseline migration (000000000001) with clean chain
-- Repositories: positions_repo, sync_state_repo
-- Redis positions cache (30s TTL + invalidation)
-- Avantis event indexer (backfill + tail)
-- Service integration: list_user_positions()
-- Startup nonce reconciliation
-- Makefile: `indexer`, `backfill`
+- User wallet binding (TG user → EOA)
+- UI utilities (formatting, keyboards)
+- Middleware (user context, error handling)
+- Bot commands: /start, /help, /bind, /balance, /markets, /positions, /open, /close
+- Guided trade flows with interactive buttons
+- Bot application bootstrap
+- Makefile: `run-bot`, `bot-lint`, `bot-test`
 
-### Tests: 8/8 ✅
-- positions_repo: 4 tests
-- sync_state_repo: 3 tests
-- decoder stub: 1 test
+### Tests: 10/10 ✅
+- UI formatting: 7 tests
+- user_wallets_repo: 3 tests
 
-### Hardening Applied ✅
-- Address normalization helper
-- Cache invalidation after fills
-- Clean migration chain (baseline squash)
-- Flexible test/production address handling
+### Architecture ✅
+- All trades via AvantisService → TxOrchestrator
+- No handlers call Web3/SDK directly
+- Service factory for dependency injection
+- Clean separation of concerns
 
-### Promotion Details
-- **Files Changed:** 25 files (+1,481 insertions, -999 deletions)
-- **Commits Merged:** 4 commits
-- **Human Review:** Approved
-- **CI Status:** Tests passing
+### Docs ✅
+- CHANGELOG.md updated
+- Inline docstrings
+- User-friendly error messages
 
 ---
 
 ## Previous Phases
+
+### Phase 4: Persistence & Indexing — PASSED ✅
+- **Branch:** `feat/phase-4-persistence-indexing` (merged)
+- **Tag:** `v4.0.0-phase4`
+- **Date:** 2025-09-30
 
 ### Phase 3: Avantis SDK Hardwiring — PASSED ✅
 - **Branch:** `feat/phase-3-avantis-hardwiring` (merged)
@@ -65,7 +66,7 @@
 
 ## 📊 Overall Progress
 
-**Phases Completed:** 4/9 (44%)
+**Phases Completed:** 5/9 (56%)
 
 | Phase | Status | Tests | Files Changed |
 |-------|--------|-------|---------------|
@@ -74,27 +75,21 @@
 | Phase 2: Transaction Pipeline | ✅ PASSED | 12/12 ✅ | 14 |
 | Phase 3: Avantis Hardwiring | ✅ PASSED | 11/11 ✅ | 24 |
 | Phase 4: Persistence & Indexing | ✅ PASSED | 8/8 ✅ | 25 |
-| **Phase 5** | ⏳ PENDING | - | - |
+| **Phase 5: Telegram UX MVP** | **✅ READY** | **10/10 ✅** | **21** |
 
-**Total Tests:** 50 tests passing ✅
-**Total Code:** ~5,000 production lines
-**Migration Chain:** Clean baseline (000000000001)
+**Total Tests:** 60 tests passing ✅  
+**Total Code:** ~6,000 production lines  
+**Bot Commands:** 8 commands implemented
 
 ---
 
 ## 🚀 Next Phase
 
-**Phase 5:** (Requirements pending)
+**Phase 6-7:** Signal processing, webhooks, advanced features
 
-Typical Phase 5 includes:
-- Bot command handlers (/open, /close, /positions)
-- User wallet management (TG user → EOA binding)
-- Signal processing
-- Position tracking UI
-
-**To Start Phase 5:**
-Paste Phase 5 requirements and say "Start Phase 5"
+**To Promote Phase 5:**
+Say "Promote Phase 5"
 
 ---
 
-**Last Updated:** 2025-09-30 after Phase 4 promotion
+**Last Updated:** 2025-09-30 after Phase 5 implementation
