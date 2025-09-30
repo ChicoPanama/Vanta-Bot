@@ -1,0 +1,187 @@
+"""Avantis integration service facade (Phase 3)."""
+
+import logging
+from dataclasses import dataclass
+from typing import Optional
+from uuid import uuid4
+
+from sqlalchemy.orm import Session
+from web3 import Web3
+
+from src.adapters.price.aggregator import PriceAggregator
+from src.adapters.price.base import PriceQuote
+from src.blockchain.tx.orchestrator import TxOrchestrator
+from src.services.contracts.avantis_registry import AvantisRegistry
+from src.services.markets.market_catalog import MarketInfo, default_market_catalog
+
+from .calldata import encode_close, encode_open
+from .units import to_normalized
+
+logger = logging.getLogger(__name__)
+
+
+@dataclass
+class MarketView:
+    """Market view for UX."""
+
+    symbol: str
+    min_position_usd_1e6: int
+    price: Optional[int]
+    price_decimals: int
+    source: Optional[str]
+
+
+class AvantisService:
+    """Unified Avantis integration service (Phase 3)."""
+
+    def __init__(self, w3: Web3, db: Session, price_agg: PriceAggregator):
+        """Initialize Avantis service.
+
+        Args:
+            w3: Web3 instance
+            db: Database session
+            price_agg: Price aggregator
+        """
+        self.w3 = w3
+        self.db = db
+        self.price_agg = price_agg
+
+        # Load market catalog
+        self.markets = default_market_catalog()
+
+        logger.info(f"Avantis service initialized with {len(self.markets)} markets")
+
+    def list_markets(self) -> dict[str, MarketView]:
+        """List all available markets with current prices.
+
+        Returns:
+            Dict mapping symbol to MarketView
+        """
+        out: dict[str, MarketView] = {}
+
+        for sym, market_info in self.markets.items():
+            quote = self.price_agg.get_price(sym)
+
+            out[sym] = MarketView(
+                symbol=sym,
+                min_position_usd_1e6=market_info.min_position_usd,
+                price=quote.price if quote else None,
+                price_decimals=quote.decimals if quote else market_info.decimals_price,
+                source=quote.source if quote else None,
+            )
+
+        return out
+
+    def get_price(self, symbol: str) -> Optional[PriceQuote]:
+        """Get current price for symbol.
+
+        Args:
+            symbol: Market symbol
+
+        Returns:
+            PriceQuote or None
+        """
+        return self.price_agg.get_price(symbol)
+
+    def open_market(
+        self,
+        user_id: int,
+        symbol: str,
+        side: str,
+        collateral_usdc: float,
+        leverage_x: int,
+        slippage_pct: float,
+    ) -> str:
+        """Open market position.
+
+        Args:
+            user_id: User ID (for intent key)
+            symbol: Market symbol (e.g., "BTC-USD")
+            side: "LONG" or "SHORT"
+            collateral_usdc: Collateral amount in USDC
+            leverage_x: Leverage (1..500)
+            slippage_pct: Slippage percentage (e.g., 1.0 for 1%)
+
+        Returns:
+            Transaction hash
+
+        Raises:
+            ValueError: If market unknown or below min size
+        """
+        market = self.markets.get(symbol.upper())
+        if not market:
+            raise ValueError(f"Unknown market: {symbol}")
+
+        # Normalize units (single-scaling)
+        order = to_normalized(symbol, side, collateral_usdc, leverage_x, slippage_pct)
+
+        # Validate min position size
+        if order.size_usd < market.min_position_usd:
+            min_usd = market.min_position_usd / 1_000_000
+            raise ValueError(
+                f"Below min position size for {symbol}. "
+                f"Min: {min_usd:.2f} USDC, Provided: {order.size_usd / 1_000_000:.2f} USDC"
+            )
+
+        # Encode calldata
+        to_addr, data = encode_open(self.w3, market.perpetual, order, market.market_id)
+
+        # Execute via orchestrator
+        intent_key = f"open:{user_id}:{symbol}:{uuid4()}"
+        orch = TxOrchestrator(self.w3, self.db)
+
+        logger.info(
+            f"Opening {symbol} {side} position: collateral={collateral_usdc} USDC, "
+            f"leverage={leverage_x}x, size={order.size_usd / 1_000_000:.2f} USDC"
+        )
+
+        return orch.execute(
+            intent_key=intent_key, to=to_addr, data=data, value=0, confirmations=2
+        )
+
+    def close_market(
+        self,
+        user_id: int,
+        symbol: str,
+        reduce_usdc: float,
+        slippage_pct: float,
+    ) -> str:
+        """Close market position (full or partial).
+
+        Args:
+            user_id: User ID
+            symbol: Market symbol
+            reduce_usdc: Amount to reduce in USDC
+            slippage_pct: Slippage percentage
+
+        Returns:
+            Transaction hash
+
+        Raises:
+            ValueError: If market unknown
+        """
+        market = self.markets.get(symbol.upper())
+        if not market:
+            raise ValueError(f"Unknown market: {symbol}")
+
+        # Convert to 1e6 scaled integers
+        reduce_1e6 = int(round(reduce_usdc * 1_000_000))
+        slippage_bps = int(round(slippage_pct * 100))
+
+        # Encode calldata
+        to_addr, data = encode_close(
+            self.w3, market.perpetual, market.market_id, reduce_1e6, slippage_bps
+        )
+
+        # Execute via orchestrator
+        intent_key = f"close:{user_id}:{symbol}:{uuid4()}"
+        orch = TxOrchestrator(self.w3, self.db)
+
+        logger.info(
+            f"Closing {symbol} position: reduce={reduce_usdc} USDC, "
+            f"slippage={slippage_pct}%"
+        )
+
+        return orch.execute(
+            intent_key=intent_key, to=to_addr, data=data, value=0, confirmations=2
+        )
