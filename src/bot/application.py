@@ -12,6 +12,7 @@ from src.adapters.price.chainlink_adapter import ChainlinkAdapter
 from src.blockchain.avantis.service import AvantisService
 from src.bot.handlers.base import register_base
 from src.bot.handlers.market_handlers import register_markets
+from src.bot.handlers.ops_handlers import register_ops
 from src.bot.handlers.positions_handlers import register_positions
 from src.bot.handlers.trade_handlers import register_trades
 from src.bot.handlers.wallet_handlers import register_wallet
@@ -63,6 +64,7 @@ def build_app():
     register_markets(app, svc)
     register_positions(app, svc)
     register_trades(app, svc)
+    register_ops(app, svc)
 
     logger.info("✅ Telegram application built successfully")
     return app
