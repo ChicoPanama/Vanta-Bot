@@ -1,402 +1,164 @@
-# src/services/indexers/avantis_indexer.py
-from __future__ import annotations
+"""
+Avantis Indexer (Phase 4)
 
-import asyncio
-import json
-import os
+Backfills from last stored block to `tip - CONFIRMATIONS`, parses trade events into
+IndexedFill rows, and updates UserPosition aggregates. Then follows head in a loop.
+
+TODO: Replace EVENT topics/decoders with real Avantis ABI once confirmed.
+"""
+
+import logging
 import time
 from collections.abc import Iterable
-from dataclasses import dataclass
-from typing import Any
+from datetime import datetime
 
-from loguru import logger
-from tenacity import retry, stop_after_attempt, wait_exponential
+from sqlalchemy import create_engine
+from sqlalchemy.orm import sessionmaker
 from web3 import Web3
-from web3.contract.contract import Contract
-from web3.providers.rpc import HTTPProvider
-from web3.providers.websocket import WebsocketProviderV2
-from web3.types import LogReceipt
 
-# === ENV / CONFIG ===
-BASE_RPC_URL = os.getenv("BASE_RPC_URL")
-BASE_WS_URL = os.getenv("BASE_WS_URL", "")
-BASE_CHAIN_ID = int(os.getenv("BASE_CHAIN_ID", "8453"))
-AVANTIS_TRADING_CONTRACT = os.getenv("AVANTIS_TRADING_CONTRACT")  # 0x...
-AVANTIS_VAULT_CONTRACT = os.getenv("AVANTIS_VAULT_CONTRACT")  # 0x...
-USDC_CONTRACT = os.getenv("USDC_CONTRACT")  # present in env.example
+from src.config.settings import settings
+from src.database.models import IndexedFill
+from src.repositories.positions_repo import insert_fills, upsert_position
+from src.repositories.sync_state_repo import get_block, set_block
 
-# === OPERATIONAL TOGGLES ===
-INDEXER_BACKFILL_RANGE = int(os.getenv("INDEXER_BACKFILL_RANGE", "50000"))
-INDEXER_PAGE = int(os.getenv("INDEXER_PAGE", "2000"))
-INDEXER_SLEEP_WS = int(os.getenv("INDEXER_SLEEP_WS", "2"))
-INDEXER_SLEEP_HTTP = int(os.getenv("INDEXER_SLEEP_HTTP", "5"))
+logger = logging.getLogger(__name__)
 
-ABI_DIR = os.path.join(
-    os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(__file__)))),
-    "config",
-    "abis",
-)
-TRADING_ABI_PATH = os.path.join(ABI_DIR, "Trading.json")
-VAULT_ABI_PATH = os.path.join(ABI_DIR, "Vault.json")
+# Configuration
+CONFIRMATIONS = 2
+SYNC_NAME = "avantis_indexer"
+CHUNK = 2_000  # blocks per query (tune per provider limits)
+
+# Placeholder topic signatures (TODO: update with real Avantis events)
+# e.g., keccak("PositionIncreased(address indexed user, uint256 marketId, bool isLong, uint256 usd, uint256 collateral)")
+TOPIC_OPEN = "0x" + "11" * 32
+TOPIC_CLOSE = "0x" + "22" * 32
 
 
-# === SIMPLE DTOs ===
-@dataclass
-class TraderFill:
-    address: str
-    pair: str
-    is_long: bool
-    size: float
-    price: float
-    fee: float
-    side: str  # "OPEN" | "CLOSE" | "LIMIT" | "LIQUIDATION"
-    block_number: int
-    tx_hash: str
-    ts: int
-    maker_taker: str | None = None
+def _decode_event(w3: Web3, log: dict) -> Iterable[IndexedFill]:
+    """Decode log event to IndexedFill records.
 
+    TODO: Replace with real ABI decoding once Avantis event structure is confirmed.
+    Use w3.codec or contract.events.YourEvent().processLog(log)
 
-@dataclass
-class TraderPosition:
-    address: str
-    pair: str
-    entry_px: float
-    size: float
-    is_long: bool
-    opened_at: int
-    closed_at: int | None
-    pnl_realized: float
-    fees: float
-    funding: float
-    tx_open: str
-    tx_close: str | None
+    Args:
+        w3: Web3 instance
+        log: Raw log dict from eth_getLogs
 
-
-def _load_abi(path: str) -> list[dict[str, Any]]:
-    """Load ABI from JSON file with fallback.
-
-    Supports both plain ABI arrays and artifact JSON with a top-level 'abi' key.
+    Returns:
+        Iterable of IndexedFill objects
     """
-    try:
-        with open(path) as f:
-            obj = json.load(f)
-        abi = obj.get("abi", obj) if isinstance(obj, dict) else obj
-        if not isinstance(abi, list):
-            logger.error(f"ABI at {path} is not a list; got {type(abi).__name__}")
-            return []
-        return abi
-    except FileNotFoundError:
-        logger.warning(f"ABI file not found: {path}. Using empty ABI.")
-        return []
-    except json.JSONDecodeError as e:
-        logger.error(f"Invalid JSON in ABI file {path}: {e}")
-        return []
+    # STUB: Return empty list until real decoder is implemented
+    # In production, this would parse log topics/data and return IndexedFill objects
+    return []
 
 
-class AvantisIndexer:
+def _apply_fill(db, fill: IndexedFill) -> None:
+    """Apply fill to user position aggregate.
+
+    Args:
+        db: Database session
+        fill: IndexedFill record
     """
-    First-pass Avantis indexer:
-    - Uses HTTP provider for backfill (reliable pagination).
-    - Uses WS provider for tailing (low-latency new blocks).
-    - Decodes Trading/Vault events with local ABIs (put ABI JSON in config/abis).
-    - Writes out normalized events via user-provided callbacks (inject later).
-    - Persists fills directly to database for real-time analytics.
-    """
+    # Positive usd_1e6 means increase; negative means reduction
+    is_long = fill.is_long
+    size_delta = fill.usd_1e6
+    coll_delta = fill.collateral_usdc_1e6
 
-    def __init__(self) -> None:
-        if not BASE_RPC_URL or not AVANTIS_TRADING_CONTRACT:
-            raise RuntimeError(
-                "Missing BASE_RPC_URL or AVANTIS_TRADING_CONTRACT in environment."
-            )
-
-        self.w3_http = Web3(HTTPProvider(BASE_RPC_URL, request_kwargs={"timeout": 30}))
-        self.w3_ws: Web3 | None = None
-
-        if BASE_WS_URL:
-            try:
-                self.w3_ws = Web3(WebsocketProviderV2(BASE_WS_URL))
-            except Exception as e:
-                logger.warning(f"Failed to initialize WebSocket provider: {e}")
-
-        # Load ABIs with fallback
-        self.trading_abi = _load_abi(TRADING_ABI_PATH)
-        self.vault_abi = _load_abi(VAULT_ABI_PATH)
-
-        # Initialize contracts
-        self.trading: Contract = self.w3_http.eth.contract(
-            address=Web3.to_checksum_address(AVANTIS_TRADING_CONTRACT),
-            abi=self.trading_abi,
-        )
-
-        self.vault: Contract | None = None
-        if AVANTIS_VAULT_CONTRACT and self.vault_abi:
-            self.vault = self.w3_http.eth.contract(
-                address=Web3.to_checksum_address(AVANTIS_VAULT_CONTRACT),
-                abi=self.vault_abi,
-            )
-
-        # Database session factory for persistence
-        self._session_factory = None
-
-        # Placeholders for persistence callbacks (wire to your DB layer)
-        self.on_fill = None  # Callable[[TraderFill], Awaitable[None]]
-        self.on_position = None  # Callable[[TraderPosition], Awaitable[None]]
-
-        logger.info(
-            "AvantisIndexer initialized (chain_id={}, http={}, ws={})",
-            BASE_CHAIN_ID,
-            bool(self.w3_http),
-            bool(self.w3_ws),
-        )
-
-    # ---- Public API ----
-    @retry(
-        stop=stop_after_attempt(5), wait=wait_exponential(multiplier=1, min=1, max=10)
+    upsert_position(
+        db,
+        user_addr=fill.user_address,
+        symbol=fill.symbol,
+        is_long=is_long,
+        size_delta_1e6=size_delta,
+        collateral_delta_1e6=coll_delta,
     )
-    async def backfill(self, from_block: int, to_block: int) -> int:
-        """
-        Backfills Trading contract events between blocks. This is a thin skeleton; you will map
-        concrete ABI event names here once your Trading.json is present.
-        """
-        logger.info("Backfill start: {} -> {}", from_block, to_block)
 
-        # Example: if Trading.json defines events 'TradeOpened', 'TradeClosed', 'LimitExecuted', 'Liquidation'
-        # you can filter like this:
-        event_names = ["TradeOpened", "TradeClosed", "LimitExecuted", "Liquidation"]
-        total = 0
 
-        for name in event_names:
-            if not hasattr(self.trading.events, name):
-                logger.warning("ABI does not contain event {}", name)
-                continue
+def run_once(w3: Web3, SessionLocal) -> int:
+    """Run one indexing iteration.
 
-            event_cls = getattr(self.trading.events, name)
-            # Paginate by configurable page size for safety
-            step = INDEXER_PAGE
+    Args:
+        w3: Web3 instance
+        SessionLocal: SQLAlchemy session factory
 
-            for start in range(from_block, to_block + 1, step):
-                end = min(start + step - 1, to_block)
-                try:
-                    logs: Iterable[LogReceipt] = event_cls().get_logs(
-                        fromBlock=start, toBlock=end
-                    )
-                except Exception as e:
-                    logger.exception(
-                        "get_logs failed {} {}-{}: {}", name, start, end, e
-                    )
-                    raise
+    Returns:
+        Number of blocks processed
+    """
+    with SessionLocal() as db:
+        start = get_block(db, SYNC_NAME)
+        tip = w3.eth.block_number
+        target = max(0, tip - CONFIRMATIONS)
 
-                for log in logs:
-                    await self._consume_event(name, log)
-                    total += 1
+        if start == 0:
+            # First run: start from recent history (adjust as needed)
+            start = max(0, target - 1000)  # Last 1000 blocks
+            logger.info(f"First run, starting from block {start}")
 
-        logger.info("Backfill complete. events={}", total)
-        return total
+        if start >= target:
+            return 0
 
-    async def tail_follow(self, start_block: int | None = None) -> None:
-        """
-        Subscribe new blocks (WS if available; else poll HTTP) and process Trading events forward.
-        Enhanced with gap detection and observability.
-        """
+        end = min(target, start + CHUNK)
+
         logger.info(
-            "Tail follow starting (ws={}, sleep_ws={}s, sleep_http={}s)",
-            bool(self.w3_ws),
-            INDEXER_SLEEP_WS,
-            INDEXER_SLEEP_HTTP,
-        )
-        current = start_block or self.w3_http.eth.block_number
-        last_log_time = time.time()
-
-        while True:
-            try:
-                latest = (
-                    self.w3_http.eth.block_number
-                    if not self.w3_ws
-                    else self.w3_ws.eth.block_number
-                )
-
-                # Gap detection
-                gap = latest - current
-                if gap > 2 * INDEXER_PAGE:
-                    logger.warning(
-                        "Indexer falling behind: {} blocks behind (latest={}, current={})",
-                        gap,
-                        latest,
-                        current,
-                    )
-
-                if latest > current:
-                    events_processed = await self.backfill(current + 1, latest)
-                    current = latest
-
-                    # Log progress every 60 seconds
-                    now = time.time()
-                    if now - last_log_time > 60:
-                        logger.info(
-                            "Tail follow progress: block={}, events_this_batch={}",
-                            current,
-                            events_processed,
-                        )
-                        last_log_time = now
-
-                await asyncio.sleep(
-                    INDEXER_SLEEP_WS if self.w3_ws else INDEXER_SLEEP_HTTP
-                )
-            except Exception as e:
-                logger.exception("tail_follow loop error: {}", e)
-                await asyncio.sleep(5)
-
-    # ---- Internal decoding ----
-    async def _consume_event(self, name: str, log: LogReceipt) -> None:
-        """
-        Decode an event into our normalized DTOs and forward to persistence callbacks.
-        Field mappings based on ABI inspection of Trading.json.
-        """
-        try:
-            data = (
-                dict(log["args"])
-                if "args" in log and isinstance(log["args"], dict)
-                else {}
-            )
-        except Exception as e:
-            logger.warning(f"Error parsing log args: {e}")
-            data = {}
-
-        block_number = log.get("blockNumber", 0) or 0
-        tx_hash = log.get("transactionHash", b"").hex()
-
-        # Map event name to side based on ABI inspection
-        name_upper = name.upper()
-        if name_upper in ("TRADEOPENED", "LIMITEXECUTED"):
-            side = "OPEN"
-        elif name_upper in ("TRADECLOSED", "LIQUIDATION"):
-            side = "CLOSE"
-        else:
-            side = name_upper
-
-        # Extract fields based on actual ABI structure from Trading.json
-        # TradeOpened: ['trader', 'pair', 'isLong', 'size', 'price', 'fee']
-        # TradeClosed: ['trader', 'pair', 'size', 'price', 'pnl']
-        # LimitExecuted: ['trader', 'pair', 'size', 'price']
-        # Liquidation: ['trader', 'pair', 'size', 'price', 'loss']
-
-        address = str(data.get("trader", "")).lower()
-        pair = str(data.get("pair", ""))
-
-        # Handle is_long field (only present in TradeOpened)
-        is_long = data.get("isLong", False) if "isLong" in data else False
-
-        size = float(data.get("size", 0))
-        price = float(data.get("price", 0))
-        fee = float(data.get("fee", 0))
-
-        # Additional fields for specific events
-        float(data.get("pnl", 0)) if "pnl" in data else 0
-        float(data.get("loss", 0)) if "loss" in data else 0
-        ts = await self._block_timestamp(block_number)
-
-        # Calculate notional USD value
-        notional = abs(price * size)
-        block_hash = log.get("blockHash", b"").hex() if log.get("blockHash") else None
-
-        # Persist to database if session factory is available
-        if self._session_factory:
-            try:
-                from sqlalchemy import text
-
-                with self._session_factory() as session:  # type: Session
-                    # Check for duplicate
-                    existing = session.execute(
-                        text(
-                            "SELECT id FROM fills WHERE tx_hash = :tx_hash AND address = :address AND pair = :pair AND side = :side"
-                        ),
-                        {
-                            "tx_hash": tx_hash,
-                            "address": address.lower(),
-                            "pair": pair,
-                            "side": side,
-                        },
-                    ).fetchone()
-
-                    if not existing:
-                        # Insert new fill record using raw SQL
-                        session.execute(
-                            text(
-                                """
-                                INSERT INTO fills (
-                                    address, pair, is_long, size, price, notional_usd, fee, side,
-                                    maker_taker, block_number, block_hash, tx_hash, ts
-                                ) VALUES (
-                                    :address, :pair, :is_long, :size, :price, :notional_usd, :fee, :side,
-                                    :maker_taker, :block_number, :block_hash, :tx_hash, :ts
-                                )
-                            """
-                            ),
-                            {
-                                "address": address.lower(),
-                                "pair": pair,
-                                "is_long": is_long,
-                                "size": size,
-                                "price": price,
-                                "notional_usd": notional,
-                                "fee": fee,
-                                "side": side,
-                                "maker_taker": None,  # Not available in current ABI
-                                "block_number": block_number,
-                                "block_hash": block_hash,
-                                "tx_hash": tx_hash,
-                                "ts": ts,
-                            },
-                        )
-                        session.commit()
-                        logger.debug(f"Persisted fill: {address[:8]}... {pair} {side}")
-                    else:
-                        logger.debug(f"Duplicate fill skipped: {tx_hash}")
-
-            except Exception as e:
-                logger.error(f"Failed to persist fill: {e}")
-
-        # Create normalized fill for callbacks
-        fill = TraderFill(
-            address=address,
-            pair=pair,
-            is_long=is_long,
-            size=size,
-            price=price,
-            fee=fee,
-            side=side,
-            block_number=block_number,
-            tx_hash=tx_hash,
-            ts=ts,
+            f"Indexing blocks {start + 1} to {end} (tip={tip}, target={target})"
         )
 
-        if self.on_fill:
-            await self.on_fill(fill)
+        # Get logs (TODO: filter by Avantis contract addresses)
+        logs = w3.eth.get_logs({"fromBlock": start + 1, "toBlock": end})
 
-        # Log event for debugging
-        logger.debug(
-            f"Processed {name} event: {address[:8]}... {pair} {side} size={size} price={price}"
-        )
+        fills: list[IndexedFill] = []
+        for lg in logs:
+            # TODO: Filter by Avantis contract addresses
+            # if lg["address"].lower() not in allowed_contract_set:
+            #     continue
 
+            for fill in _decode_event(w3, lg):
+                fills.append(fill)
+
+        if fills:
+            logger.info(f"Found {len(fills)} fills in blocks {start + 1}-{end}")
+            insert_fills(db, fills)
+            for fill in fills:
+                _apply_fill(db, fill)
+
+        set_block(db, SYNC_NAME, end)
+        return end - start
+
+
+def main():
+    """Main indexer loop."""
+    logger.info(
+        f"Starting Avantis indexer (confirmations={CONFIRMATIONS}, chunk={CHUNK})"
+    )
+
+    w3 = Web3(Web3.HTTPProvider(settings.BASE_RPC_URL))
+    if not w3.is_connected():
+        logger.error("Web3 not connected, cannot start indexer")
         return
 
-    async def _block_timestamp(self, block_number: int) -> int:
-        """Get block timestamp with fallback"""
+    eng = create_engine(
+        settings.DATABASE_URL.replace("sqlite+aiosqlite:", "sqlite:"),
+        pool_pre_ping=True,
+    )
+    SessionLocal = sessionmaker(bind=eng, expire_on_commit=False)
+
+    while True:
         try:
-            blk = self.w3_http.eth.get_block(block_number)
-            return int(blk["timestamp"])
+            n = run_once(w3, SessionLocal)
+            if n == 0:
+                # Caught up, sleep before next poll
+                time.sleep(2)
+        except KeyboardInterrupt:
+            logger.info("Indexer stopped by user")
+            break
         except Exception as e:
-            logger.warning(f"Error getting block timestamp for {block_number}: {e}")
-            return int(time.time())
+            logger.error(f"Indexer error: {e}", exc_info=True)
+            time.sleep(5)
 
-    def set_callbacks(self, on_fill=None, on_position=None):
-        """Set persistence callbacks"""
-        if on_fill:
-            self.on_fill = on_fill
-        if on_position:
-            self.on_position = on_position
 
-    def set_db_session_factory(self, session_factory):
-        """Set database session factory for persistence"""
-        self._session_factory = session_factory
-        logger.info("Database session factory set for persistence")
+if __name__ == "__main__":
+    logging.basicConfig(
+        level=logging.INFO,
+        format="%(asctime)s | %(levelname)-8s | %(name)s:%(funcName)s:%(lineno)d | %(message)s",
+    )
+    main()

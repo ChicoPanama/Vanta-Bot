@@ -326,8 +326,6 @@ class IndexedFill(Base):
     meta = Column(Text, default="{}", nullable=False)  # JSON as TEXT for SQLite compat
 
 
-
-
 class UserPosition(Base):
     """Aggregated user position state (Phase 4)."""
 
@@ -341,7 +339,9 @@ class UserPosition(Base):
     user_address = Column(String(42), index=True, nullable=False)
     symbol = Column(String(32), index=True, nullable=False, default="BTC-USD")
     is_long = Column(Boolean, nullable=False)
-    size_usd_1e6 = Column(BigInteger, default=0, nullable=False)  # signed notionals; 0 = flat
+    size_usd_1e6 = Column(
+        BigInteger, default=0, nullable=False
+    )  # signed notionals; 0 = flat
     entry_collateral_1e6 = Column(BigInteger, default=0, nullable=False)
     realized_pnl_1e6 = Column(BigInteger, default=0, nullable=False)
     updated_at = Column(DateTime, default=func.now(), nullable=False)

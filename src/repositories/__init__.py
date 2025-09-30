@@ -1,1 +1,1 @@
-"""Repository layer for database operations (Phase 1)."""
+"""Repository package for data access (Phase 4)."""
