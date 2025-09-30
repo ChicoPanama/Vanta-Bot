@@ -107,3 +107,13 @@ db.close()"
 validate-markets: ## Validate market configuration (Phase 3)
 	@echo "🔍 Validating markets..."
 	@python -c "from web3 import Web3; from src.config.settings import settings; from src.startup.markets_validator import validate_markets_and_feeds; w3 = Web3(Web3.HTTPProvider(settings.BASE_RPC_URL)); validate_markets_and_feeds(w3); print('✅ Markets validated')"
+
+indexer: ## Run Avantis indexer (Phase 4)
+	python -m src.services.indexers.avantis_indexer
+
+backfill: ## Run one-shot indexer backfill (Phase 4)
+	@python -c "from web3 import Web3; from sqlalchemy import create_engine; from sqlalchemy.orm import sessionmaker; \
+from src.config.settings import settings; from src.services.indexers.avantis_indexer import run_once; \
+w3 = Web3(Web3.HTTPProvider(settings.BASE_RPC_URL)); \
+Session = sessionmaker(bind=create_engine(settings.DATABASE_URL.replace('sqlite+aiosqlite:', 'sqlite:'))); \
+print(f'Processed {run_once(w3, Session)} blocks')"

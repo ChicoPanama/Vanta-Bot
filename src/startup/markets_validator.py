@@ -24,9 +24,9 @@ def validate_markets_and_feeds(w3: Web3) -> None:
 
     for sym, market in markets.items():
         # Validate perpetual address
-        assert w3.is_address(
-            market.perpetual
-        ), f"Invalid perp address for {sym}: {market.perpetual}"
+        assert w3.is_address(market.perpetual), (
+            f"Invalid perp address for {sym}: {market.perpetual}"
+        )
 
         # Validate min position size is set
         assert market.min_position_usd > 0, f"min_position_usd not set for {sym}"

@@ -185,3 +185,36 @@ class AvantisService:
         return orch.execute(
             intent_key=intent_key, to=to_addr, data=data, value=0, confirmations=2
         )
+
+    def list_user_positions(self, user_address: str) -> list[dict]:
+        """List positions for a user (from indexed data).
+
+        Args:
+            user_address: User wallet address
+
+        Returns:
+            List of position dicts with cached reads
+        """
+        from src.repositories.positions_repo import list_positions
+        from src.services.cache.positions_cache import PositionsCache
+
+        cache = PositionsCache()
+        cached = cache.get_positions(user_address)
+        if cached is not None:
+            return cached
+
+        rows = list_positions(self.db, user_address)
+        out = [
+            {
+                "symbol": r.symbol,
+                "is_long": r.is_long,
+                "size_usd_1e6": int(r.size_usd_1e6),
+                "collateral_1e6": int(r.entry_collateral_1e6),
+                "realized_pnl_1e6": int(r.realized_pnl_1e6),
+                "updated_at": r.updated_at.isoformat(),
+            }
+            for r in rows
+        ]
+
+        cache.set_positions(user_address, out)
+        return out

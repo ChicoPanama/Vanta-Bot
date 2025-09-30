@@ -124,3 +124,36 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Documentation
 - `PHASE3_SUMMARY.md` with complete implementation details
 - Docstrings on all public APIs
+
+## Phase 4: Persistence & Indexing — 2025-09-30
+
+### Added
+- **Database models** (Phase 4):
+  - `SyncState`: Track indexer progress by block
+  - `IndexedFill`: Store trade executions from chain events
+  - `UserPosition`: Aggregate position state per user/symbol
+- **Repositories**:
+  - `positions_repo`: CRUD for positions and fills
+  - `sync_state_repo`: Track indexer block progress
+- **Positions cache**: Redis-backed 30s TTL cache
+- **Avantis indexer**: Backfill + head-following event indexer
+  - Event decoder stub (TODO: wire real Avantis ABI)
+- **Service integration**: `AvantisService.list_user_positions()`
+- **Startup reconciliation**: `reconcile_nonces()` on boot
+- **Makefile targets**: `make indexer`, `make backfill`
+
+### Changed
+- **Migration strategy**: Squashed to single baseline
+- Fixed async/sync SQLite URL handling in Alembic
+
+### Fixed
+- Migration chain conflicts resolved
+- Model `__table_args__` use string column names
+
+### Tests
+- 8 new unit tests (100% passing)
+
+### Technical Debt
+- Event decoder stub (needs real Avantis ABI)
+- User wallet binding (TG user → EOA) pending Phase 5
+
