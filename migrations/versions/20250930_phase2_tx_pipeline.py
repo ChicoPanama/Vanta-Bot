@@ -29,7 +29,9 @@ def upgrade():
             server_default=sa.text("(CURRENT_TIMESTAMP)"),
             nullable=False,
         ),
-        sa.Column("status", sa.String(length=32), nullable=False, server_default="CREATED"),
+        sa.Column(
+            "status", sa.String(length=32), nullable=False, server_default="CREATED"
+        ),
         sa.Column("intent_metadata", sa.Text(), nullable=True),
         sa.PrimaryKeyConstraint("id"),
         sa.UniqueConstraint("intent_key"),

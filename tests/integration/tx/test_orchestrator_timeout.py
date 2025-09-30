@@ -30,18 +30,21 @@ class TestOrchestratorTimeout:
         w3.eth.get_block.return_value = {"baseFeePerGas": 1_000_000_000}
         w3.eth.estimate_gas.return_value = 100000
         w3.eth.get_transaction_count.return_value = 5
-        
+
         # Return different tx hashes for each send (RBF creates new hashes)
         tx_counter = {"count": 0}
+
         def get_hash():
             tx_counter["count"] += 1
             return "0x" + f"{tx_counter['count']:064x}"
-        
+
         w3.eth.send_raw_transaction.return_value = MagicMock()
         w3.eth.send_raw_transaction.return_value.hex = get_hash
-        
+
         # Always raise TransactionNotFound (simulates timeout)
-        w3.eth.get_transaction_receipt.side_effect = TransactionNotFound("Transaction not found")
+        w3.eth.get_transaction_receipt.side_effect = TransactionNotFound(
+            "Transaction not found"
+        )
         return w3
 
     @patch("src.blockchain.signers.factory.get_signer")

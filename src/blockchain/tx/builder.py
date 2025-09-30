@@ -15,7 +15,9 @@ logger = logging.getLogger(__name__)
 class TxBuilder:
     """Builds and signs EIP-1559 transactions."""
 
-    def __init__(self, web3_client, chain_id: int, gas_policy: Optional[GasPolicy] = None):
+    def __init__(
+        self, web3_client, chain_id: int, gas_policy: Optional[GasPolicy] = None
+    ):
         self.web3 = web3_client
         self.chain_id = chain_id
         self.gas_policy = gas_policy or GasPolicy()
@@ -138,7 +140,9 @@ class TxBuilder:
                 "type": 2,  # EIP-1559
             }
 
-            logger.debug(f"Built EIP-1559 tx: gas={gas}, maxFee={max_fee}, priority={max_priority}")
+            logger.debug(
+                f"Built EIP-1559 tx: gas={gas}, maxFee={max_fee}, priority={max_priority}"
+            )
             return tx
 
         except Exception as e:

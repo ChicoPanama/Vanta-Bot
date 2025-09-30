@@ -275,9 +275,7 @@ class TxSend(Base):
     raw_tx = Column(LargeBinary, nullable=True)  # Optional: can be large
     tx_hash = Column(String(66), nullable=False, unique=True, index=True)
     sent_at = Column(DateTime, server_default=func.now(), nullable=False)
-    replaced_by = Column(
-        String(66), nullable=True
-    )  # New tx hash if replaced via RBF
+    replaced_by = Column(String(66), nullable=True)  # New tx hash if replaced via RBF
 
 
 class TxReceipt(Base):

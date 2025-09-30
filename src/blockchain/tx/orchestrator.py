@@ -116,7 +116,9 @@ class TxOrchestrator:
                 .first()
             )
             if existing_send:
-                logger.info(f"Intent already {intent.status}, returning existing tx: {existing_send.tx_hash}")
+                logger.info(
+                    f"Intent already {intent.status}, returning existing tx: {existing_send.tx_hash}"
+                )
                 return existing_send.tx_hash
 
         # Build transaction
@@ -176,7 +178,9 @@ class TxOrchestrator:
             except TimeoutError:
                 if attempt < self.rbf_attempts - 1:
                     # Bump fees and replace
-                    logger.warning(f"Transaction stuck, attempting RBF (attempt {attempt + 1})")
+                    logger.warning(
+                        f"Transaction stuck, attempting RBF (attempt {attempt + 1})"
+                    )
                     last_hash = self._replace_transaction(
                         tx_params, nonce, send, intent
                     )
@@ -185,7 +189,9 @@ class TxOrchestrator:
                     intent.status = "FAILED"
                     self.db.add(intent)
                     self.db.commit()
-                    raise RuntimeError(f"Transaction timed out after {self.rbf_attempts} attempts: {last_hash}")
+                    raise RuntimeError(
+                        f"Transaction timed out after {self.rbf_attempts} attempts: {last_hash}"
+                    )
 
         return last_hash
 
@@ -265,7 +271,9 @@ class TxOrchestrator:
         self.db.add(intent)
         self.db.commit()
 
-        logger.info(f"Replaced tx {original_send.tx_hash} with {new_hash} (fees bumped)")
+        logger.info(
+            f"Replaced tx {original_send.tx_hash} with {new_hash} (fees bumped)"
+        )
         return new_hash
 
     def _persist_receipt(self, receipt, intent: TxIntent):
