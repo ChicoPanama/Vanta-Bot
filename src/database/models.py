@@ -345,3 +345,20 @@ class UserPosition(Base):
     entry_collateral_1e6 = Column(BigInteger, default=0, nullable=False)
     realized_pnl_1e6 = Column(BigInteger, default=0, nullable=False)
     updated_at = Column(DateTime, default=func.now(), nullable=False)
+
+
+# ========== Phase 5: Telegram UX MVP ==========
+
+
+class UserWallet(Base):
+    """User wallet binding (TG user → EOA) (Phase 5)."""
+
+    __tablename__ = "user_wallets"
+    __table_args__ = (
+        Index("ix_user_wallets_tg", "tg_user_id", unique=True),
+        Index("ix_user_wallets_addr", "address", unique=True),
+    )
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    tg_user_id = Column(BigInteger, nullable=False)
+    address = Column(String(42), nullable=False)

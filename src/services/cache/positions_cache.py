@@ -40,7 +40,7 @@ class PositionsCache:
             addr = Web3.to_checksum_address(user_addr).lower()
         except (ValueError, TypeError):
             addr = user_addr.lower()
-        
+
         chain_id = getattr(settings, "CHAIN_ID", 8453)  # Base mainnet
         return f"pos:{chain_id}:{addr}"
 
