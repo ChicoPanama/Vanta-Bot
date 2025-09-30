@@ -30,6 +30,13 @@ class Settings(BaseSettings):
     DATABASE_URL: str = Field("sqlite+aiosqlite:///vanta_bot.db", env="DATABASE_URL")
     REDIS_URL: str = Field("redis://localhost:6379/0", env="REDIS_URL")
 
+    # Signals & Automation (Phase 6)
+    WEBHOOK_HMAC_SECRET: str | None = None
+    SIGNALS_ENABLED: bool = True
+    SIGNALS_QUEUE: str = "signals:q:v1"
+    SIGNALS_MAX_BATCH: int = 50
+    AUTOMATION_PAUSED: bool = False
+
     # Security & secrets
     ENCRYPTION_KEY: str | None = Field(None, env="ENCRYPTION_KEY")
     TRADER_PRIVATE_KEY: str | None = Field(None, env="TRADER_PRIVATE_KEY")
