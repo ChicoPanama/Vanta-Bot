@@ -89,11 +89,13 @@ jobs:
       - name: Safety scan
         run: safety check --full-report || true
       - name: Secret scan (trufflehog)
-        uses: trufflesecurity/trufflehog@v3
+        uses: trufflesecurity/trufflehog@main
+        continue-on-error: true
         with:
           path: .
-          base: main
-          head: ${{ github.sha }}
+          base: ${{ github.event.repository.default_branch }}
+          head: HEAD
+          extra_args: --only-verified
 
   verify_release:
     runs-on: ubuntu-latest

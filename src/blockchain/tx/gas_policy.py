@@ -25,26 +25,37 @@ class GasPolicy:
             Tuple of (max_fee_per_gas, max_priority_fee_per_gas) in wei
         """
         try:
-            # Get current base fee
-            base_fee = web3_client.eth.gas_price
+            # Get latest block to read baseFeePerGas
+            latest_block = web3_client.eth.get_block("latest")
+            base_fee = latest_block.get("baseFeePerGas")
 
-            # Apply surge multiplier if network is busy
-            max_fee = int(
-                min(
-                    base_fee * self.surge_multiplier,
-                    self.max_fee_cap_gwei * 1e9,  # Convert Gwei to wei
+            if base_fee is None:
+                # Fallback for non-EIP-1559 chains (shouldn't happen on Base)
+                gas_price = int(web3_client.eth.gas_price * 1.2)
+                priority = int(gas_price * 0.1)
+                logger.warning(
+                    "No baseFeePerGas found; using legacy gas_price fallback"
                 )
-            )
+                return gas_price, priority
 
             # Set priority fee (tip to miner)
-            max_priority = int(self.max_priority_gwei * 1e9)
+            priority_wei = int(self.max_priority_gwei * 1e9)
+
+            # Calculate max fee: base + priority, with safety multiplier
+            max_fee = int((base_fee + priority_wei) * self.surge_multiplier)
+
+            # Cap to prevent excessive fees
+            max_fee_cap_wei = int(self.max_fee_cap_gwei * 1e9)
+            max_fee = min(max_fee, max_fee_cap_wei)
 
             # Ensure minimum priority fee
-            min_priority = int(self.min_priority_gwei * 1e9)
-            max_priority = max(max_priority, min_priority)
+            min_priority_wei = int(self.min_priority_gwei * 1e9)
+            priority_wei = max(priority_wei, min_priority_wei)
 
-            logger.debug(f"Gas quote: max_fee={max_fee}, priority={max_priority}")
-            return max_fee, max_priority
+            logger.debug(
+                f"EIP-1559 gas quote: base={base_fee}, max_fee={max_fee}, priority={priority_wei}"
+            )
+            return max_fee, priority_wei
 
         except Exception as e:
             logger.error(f"Failed to get gas quote: {e}")
