@@ -19,6 +19,7 @@ from src.bot.handlers.trade_handlers import register_trades
 from src.bot.handlers.wallet_handlers import register_wallet
 from src.bot.middlewares.auth import user_context_middleware
 from src.bot.middlewares.errors import error_handler
+from src.config.feeds_loader import load_chainlink_feeds
 from src.config.settings import settings
 
 logger = logging.getLogger(__name__)
@@ -37,8 +38,8 @@ def build_services():
         Session = sessionmaker(bind=eng, expire_on_commit=False)
         db = Session()
 
-        # TODO: Add real Chainlink feed addresses when ready
-        cl_map = {}  # e.g., {"BTC-USD": "0x64c9119..."}
+        # Load Chainlink feeds from config
+        cl_map = load_chainlink_feeds()
         price_agg = PriceAggregator([ChainlinkAdapter(w3, cl_map)])
 
         svc = AvantisService(w3, db, price_agg)

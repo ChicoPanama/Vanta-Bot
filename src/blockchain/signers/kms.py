@@ -1,4 +1,19 @@
-"""AWS KMS signer implementation."""
+"""AWS KMS signer implementation.
+
+PRODUCTION NOTE:
+This module provides a foundation for AWS KMS-based transaction signing.
+Full Ethereum signing with KMS requires proper ECDSA signature reconstruction
+from the KMS response, which is not yet implemented in sign_tx().
+
+For production use:
+1. Use the LocalSigner for development and testing (set TRADER_PRIVATE_KEY)
+2. For production KMS integration:
+   - Implement proper secp256k1 signature reconstruction from KMS ECDSA_SHA_256
+   - Handle r, s, v components correctly for Ethereum transactions
+   - Test thoroughly on testnet before mainnet deployment
+
+Reference: https://docs.aws.amazon.com/kms/latest/developerguide/programming-sign.html
+"""
 
 import logging
 from typing import Any
@@ -44,17 +59,25 @@ class KmsSigner:
         return self._address
 
     def sign_tx(self, tx: dict[str, Any]) -> bytes:
-        """Sign transaction and return raw bytes (Phase 1).
+        """Sign transaction and return raw bytes.
 
-        Note: This is a placeholder - full KMS Ethereum signing requires
-        proper ECDSA signature reconstruction from KMS response.
+        NOTE: Full KMS Ethereum signing requires proper ECDSA signature
+        reconstruction from the KMS response. This is not yet implemented.
+
+        To implement:
+        1. Call KMS sign() with transaction hash
+        2. Extract r, s from KMS signature (DER-encoded)
+        3. Calculate v (recovery ID) for Ethereum
+        4. Reconstruct RLP-encoded transaction with r, s, v
+        5. Return raw transaction bytes
+
+        For now, use LocalSigner in development or implement the above for production.
         """
-        # TODO: Implement proper KMS eth signing
-        # For now, raise to avoid silent failures
         raise NotImplementedError(
-            "KMS eth signing not yet fully implemented. "
-            "Use sign_and_send for existing functionality or implement "
-            "proper ECDSA signature reconstruction from KMS."
+            "KMS eth signing requires ECDSA signature reconstruction. "
+            "Use LocalSigner for development (TRADER_PRIVATE_KEY), or implement "
+            "proper secp256k1 signature handling for production KMS use. "
+            "See module docstring for details."
         )
 
     async def sign_and_send(self, tx: dict[str, Any]) -> str:

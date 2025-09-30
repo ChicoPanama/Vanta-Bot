@@ -1,9 +1,48 @@
-.PHONY: help install dev test lint format typecheck clean docker-build docker-run
+.PHONY: help install dev test lint format typecheck clean docker-build docker-run dev-setup
 
 help: ## Show this help message
 	@echo "Vanta Bot Development Commands"
 	@echo "=============================="
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | sort | awk 'BEGIN {FS = ":.*?## "}; {printf "\033[36m%-20s\033[0m %s\n", $$1, $$2}'
+
+dev-setup: ## Phase 9: One-command dev setup (creates venv, installs deps, runs migrations)
+	@echo "╔═══════════════════════════════════════════════════════╗"
+	@echo "║     Vanta-Bot Development Setup (Phase 9)            ║"
+	@echo "╚═══════════════════════════════════════════════════════╝"
+	@echo ""
+	@echo "📦 Step 1: Creating virtual environment..."
+	python3 -m venv venv || python -m venv venv
+	@echo "✅ Virtual environment created"
+	@echo ""
+	@echo "📥 Step 2: Installing dependencies..."
+	./venv/bin/pip install -U pip setuptools wheel
+	./venv/bin/pip install -r requirements.txt
+	@echo "✅ Dependencies installed"
+	@echo ""
+	@echo "🔧 Step 3: Installing development tools..."
+	./venv/bin/pip install ruff mypy bandit pip-audit pre-commit pytest-cov
+	@echo "✅ Development tools installed"
+	@echo ""
+	@echo "🗄️  Step 4: Setting up database..."
+	@test -f .env || (cp .env.example .env && echo "⚠️  Created .env from .env.example - please configure!")
+	./venv/bin/python ops/migrate.py || echo "⚠️  Migrations failed - check database configuration"
+	@echo "✅ Database setup complete"
+	@echo ""
+	@echo "🧪 Step 5: Running smoke tests..."
+	./venv/bin/pytest tests/prod/test_smoke.py -v || echo "⚠️  Some tests failed - review above"
+	@echo ""
+	@echo "╔═══════════════════════════════════════════════════════╗"
+	@echo "║                 ✅ Setup Complete!                    ║"
+	@echo "╚═══════════════════════════════════════════════════════╝"
+	@echo ""
+	@echo "Next steps:"
+	@echo "  1. Activate venv:  source venv/bin/activate"
+	@echo "  2. Configure .env with your secrets"
+	@echo "  3. Run migrations: make migrate"
+	@echo "  4. Seed test data:  python scripts/seed_database.py"
+	@echo "  5. Start bot:      python -m src.bot.application"
+	@echo ""
+	@echo "For more commands:   make help"
 
 install: ## Install dependencies
 	pip install -r requirements.txt

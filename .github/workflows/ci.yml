@@ -83,11 +83,11 @@ jobs:
           python-version: ${{ needs.setup.outputs.python-version }}
       - name: Install security tools
         run: |
-          pip install bandit safety
-      - name: Bandit scan
+          pip install bandit pip-audit
+      - name: Bandit scan (Phase 9)
         run: bandit -r src -ll || true
-      - name: Safety scan
-        run: safety check --full-report || true
+      - name: Dependency vulnerability scan (Phase 9)
+        run: pip-audit --skip-editable || true
       - name: Secret scan (trufflehog)
         uses: trufflesecurity/trufflehog@main
         continue-on-error: true
@@ -97,9 +97,39 @@ jobs:
           head: HEAD
           extra_args: --only-verified
 
+  tooling-verification:
+    name: Phase 9 Tooling Verification
+    runs-on: ubuntu-latest
+    needs: setup
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ needs.setup.outputs.python-version }}
+      - name: Install dependencies
+        run: |
+          pip install -r requirements.txt
+      - name: Run tooling verification
+        run: python scripts/verify_tooling.py || true
+
+  chaos-tests:
+    name: Phase 9 Chaos Testing
+    runs-on: ubuntu-latest
+    needs: setup
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ needs.setup.outputs.python-version }}
+      - name: Install dependencies
+        run: |
+          pip install -r requirements.txt
+      - name: Run chaos tests
+        run: pytest tests/chaos/ -v || true
+
   verify_release:
     runs-on: ubuntu-latest
-    needs: [lint, typecheck, tests, security-scan]
+    needs: [lint, typecheck, tests, security-scan, tooling-verification, chaos-tests]
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5

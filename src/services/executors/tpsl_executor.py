@@ -10,6 +10,7 @@ from web3 import Web3
 from src.adapters.price.aggregator import PriceAggregator
 from src.adapters.price.chainlink_adapter import ChainlinkAdapter
 from src.blockchain.avantis.service import AvantisService
+from src.config.feeds_loader import load_chainlink_feeds
 from src.config.settings import settings
 from src.monitoring.metrics import loop_heartbeat, tpsl_errors, tpsl_triggers
 from src.repositories.tpsl_repo import deactivate_tpsl, list_tpsl
@@ -26,8 +27,8 @@ def run_loop():
     eng = create_engine(db_url, pool_pre_ping=True)
     Session = sessionmaker(bind=eng, expire_on_commit=False)
 
-    # TODO: Add real Chainlink feeds
-    cl_map = {}
+    # Load Chainlink feeds from config
+    cl_map = load_chainlink_feeds()
     price_agg = PriceAggregator([ChainlinkAdapter(w3, cl_map)])
 
     while True:

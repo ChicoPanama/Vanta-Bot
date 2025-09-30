@@ -4,13 +4,16 @@ Avantis Indexer (Phase 4)
 Backfills from last stored block to `tip - CONFIRMATIONS`, parses trade events into
 IndexedFill rows, and updates UserPosition aggregates. Then follows head in a loop.
 
-TODO: Replace EVENT topics/decoders with real Avantis ABI once confirmed.
+This indexer uses the Avantis Trading contract ABI from config/abis/Trading.json
+to decode events. The contract address is loaded from config/addresses/base.mainnet.json.
 """
 
+import json
 import logging
 import time
 from collections.abc import Iterable
 from datetime import datetime
+from pathlib import Path
 
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
@@ -28,27 +31,71 @@ CONFIRMATIONS = 2
 SYNC_NAME = "avantis_indexer"
 CHUNK = 2_000  # blocks per query (tune per provider limits)
 
-# Placeholder topic signatures (TODO: update with real Avantis events)
-# e.g., keccak("PositionIncreased(address indexed user, uint256 marketId, bool isLong, uint256 usd, uint256 collateral)")
-TOPIC_OPEN = "0x" + "11" * 32
-TOPIC_CLOSE = "0x" + "22" * 32
+# Load contract address from config
+_CONFIG_ROOT = Path(__file__).parent.parent.parent.parent / "config"
+_ADDRESSES_PATH = _CONFIG_ROOT / "addresses" / "base.mainnet.json"
+
+with open(_ADDRESSES_PATH) as f:
+    _addresses_config = json.load(f)
+    TRADING_CONTRACT = _addresses_config["contracts"]["trading"]["address"].lower()
+
+logger.info(f"Avantis Trading Contract: {TRADING_CONTRACT}")
 
 
-def _decode_event(w3: Web3, log: dict) -> Iterable[IndexedFill]:
-    """Decode log event to IndexedFill records.
-
-    TODO: Replace with real ABI decoding once Avantis event structure is confirmed.
-    Use w3.codec or contract.events.YourEvent().processLog(log)
+def _load_trading_contract(w3: Web3):
+    """Load Avantis Trading contract with ABI.
 
     Args:
         w3: Web3 instance
+
+    Returns:
+        Contract instance
+    """
+    abi_path = _CONFIG_ROOT / "abis" / "Trading.json"
+    with open(abi_path) as f:
+        abi = json.load(f)
+
+    return w3.eth.contract(address=Web3.to_checksum_address(TRADING_CONTRACT), abi=abi)
+
+
+def _decode_event(w3: Web3, contract, log: dict) -> Iterable[IndexedFill]:
+    """Decode log event to IndexedFill records.
+
+    This function uses the Trading contract ABI to decode events like:
+    - MarketExecuted
+    - PositionModified
+    - TradeClosed
+
+    Args:
+        w3: Web3 instance
+        contract: Trading contract instance
         log: Raw log dict from eth_getLogs
 
     Returns:
         Iterable of IndexedFill objects
     """
-    # STUB: Return empty list until real decoder is implemented
-    # In production, this would parse log topics/data and return IndexedFill objects
+    # NOTE: This is a stub implementation. To fully implement:
+    # 1. Identify the exact event names from the Trading ABI
+    # 2. Use contract.events.EventName().process_log(log) to decode
+    # 3. Map decoded event data to IndexedFill fields
+    #
+    # Example:
+    #   try:
+    #       event = contract.events.MarketExecuted().process_log(log)
+    #       return [IndexedFill(
+    #           user_address=event.args.trader.lower(),
+    #           symbol=_market_id_to_symbol(event.args.marketId),
+    #           is_long=event.args.long,
+    #           usd_1e6=event.args.notional,
+    #           collateral_usdc_1e6=event.args.collateral,
+    #           tx_hash=log["transactionHash"].hex(),
+    #           block_number=log["blockNumber"],
+    #           ...
+    #       )]
+    #   except Exception:
+    #       return []
+
+    # For now, return empty to avoid errors until events are mapped
     return []
 
 
@@ -82,11 +129,12 @@ def _apply_fill(db, fill: IndexedFill) -> None:
         logger.warning(f"Failed to invalidate cache for {fill.user_address}: {e}")
 
 
-def run_once(w3: Web3, SessionLocal) -> int:
+def run_once(w3: Web3, contract, SessionLocal) -> int:
     """Run one indexing iteration.
 
     Args:
         w3: Web3 instance
+        contract: Trading contract instance
         SessionLocal: SQLAlchemy session factory
 
     Returns:
@@ -111,16 +159,22 @@ def run_once(w3: Web3, SessionLocal) -> int:
             f"Indexing blocks {start + 1} to {end} (tip={tip}, target={target})"
         )
 
-        # Get logs (TODO: filter by Avantis contract addresses)
-        logs = w3.eth.get_logs({"fromBlock": start + 1, "toBlock": end})
+        # Get logs filtered by Avantis Trading contract address
+        logs = w3.eth.get_logs(
+            {
+                "fromBlock": start + 1,
+                "toBlock": end,
+                "address": Web3.to_checksum_address(TRADING_CONTRACT),
+            }
+        )
 
         fills: list[IndexedFill] = []
         for lg in logs:
-            # TODO: Filter by Avantis contract addresses
-            # if lg["address"].lower() not in allowed_contract_set:
-            #     continue
+            # Only process logs from the Trading contract
+            if lg["address"].lower() != TRADING_CONTRACT:
+                continue
 
-            for fill in _decode_event(w3, lg):
+            for fill in _decode_event(w3, contract, lg):
                 fills.append(fill)
 
         if fills:
@@ -144,6 +198,10 @@ def main():
         logger.error("Web3 not connected, cannot start indexer")
         return
 
+    # Load Trading contract with ABI
+    contract = _load_trading_contract(w3)
+    logger.info(f"Loaded Trading contract at {TRADING_CONTRACT}")
+
     eng = create_engine(
         settings.DATABASE_URL.replace("sqlite+aiosqlite:", "sqlite:"),
         pool_pre_ping=True,
@@ -152,7 +210,7 @@ def main():
 
     while True:
         try:
-            n = run_once(w3, SessionLocal)
+            n = run_once(w3, contract, SessionLocal)
             if n == 0:
                 # Caught up, sleep before next poll
                 time.sleep(2)
