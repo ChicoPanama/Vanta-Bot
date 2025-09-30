@@ -323,3 +323,58 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Metric definitions
 - CHANGELOG.md updated
 
+
+## Phase 9: Production Hardening & Release Engineering — 2025-09-30
+
+### Added
+- **Docker containers** for all services:
+  - Dockerfile.bot, Dockerfile.webhook, Dockerfile.worker, Dockerfile.tpsl, Dockerfile.indexer
+  - Non-root user (UID 10001)
+  - Read-only filesystem with tmpfs /tmp
+  - COMPONENT env var per service
+- **Docker Compose**: Full stack (postgres, redis, 5 app services)
+  - Health checks for all dependencies
+  - Auto-restart policies
+  - Volume persistence
+- **CI/CD workflows**:
+  - docker-build.yml: Build and push to GHCR
+  - Existing ci.yml: Tests and linting
+- **Operations scripts**:
+  - ops/migrate.py: Migration runner
+  - ops/backup.sh: Database backup
+  - ops/RUNBOOK.md: Operational procedures
+- **Environment**:
+  - .env.production.example with all required vars
+  - Production-safe defaults
+- **Startup checks**:
+  - src/startup/prod_checks.py: RPC and Redis validation
+  - Fail-fast on misconfiguration
+- **Makefile targets** (Phase 9):
+  - make docker-build: Build all images
+  - make docker-up/down: Compose orchestration
+  - make docker-logs: Tail logs
+  - make prod-migrate: Run migrations
+  - make prod-backup: Backup database
+
+### Security
+- All containers run as non-root
+- Read-only filesystems
+- No secrets in images
+- HMAC verification on webhooks
+
+### Operations
+- Health checks on all services
+- Auto-restart on failure
+- Volume persistence for data
+- Backup and restore procedures
+- Runbook for common incidents
+
+### Tests
+- 1 new smoke test (imports)
+- Total: 79 tests passing ✅
+
+### Documentation
+- ops/RUNBOOK.md with procedures
+- .env.production.example
+- Docker setup documented
+
