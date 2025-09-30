@@ -41,16 +41,23 @@ def evaluate_open(
     if symbol not in ALLOWED_SYMBOLS:
         return Decision(False, "Symbol not allowed")
 
-    if leverage_x > MAX_LEVERAGE:
-        return Decision(False, f"Leverage>{MAX_LEVERAGE}x")
+    # Get per-user policy (Phase 7 upgrade)
+    from src.repositories.risk_repo import get_or_create_policy
 
+    pol = get_or_create_policy(db, user_id)
+
+    # Check circuit breaker
+    if pol.circuit_breaker:
+        return Decision(False, "Circuit breaker ON")
+
+    # Check leverage limit
+    if leverage_x > pol.max_leverage_x:
+        return Decision(False, f"Leverage>{pol.max_leverage_x}x")
+
+    # Check position size limit
     size_usd_1e6 = int(round(collateral_usdc * leverage_x * 1_000_000))
-    if size_usd_1e6 > MAX_POSITION_USD_1E6:
+    if size_usd_1e6 > pol.max_position_usd_1e6:
         return Decision(False, "Exceeds max position")
-
-    # TODO: Check per-user circuit breaker, daily limits, etc.
-    # pol = get_or_create_policy(db, user_id)
-    # if pol.circuit_breaker: return Decision(False, "Circuit breaker ON")
 
     return Decision(True)
 
@@ -73,8 +80,13 @@ def evaluate_close(db, user_id: int, symbol: str, reduce_usdc: float) -> Decisio
     if reduce_usdc <= 0:
         return Decision(False, "Reduce amount must be positive")
 
-    # TODO: Check user circuit breaker
-    # pol = get_or_create_policy(db, user_id)
-    # if pol.circuit_breaker: return Decision(False, "Circuit breaker ON")
+    # Get per-user policy (Phase 7 upgrade)
+    from src.repositories.risk_repo import get_or_create_policy
+
+    pol = get_or_create_policy(db, user_id)
+
+    # Check circuit breaker
+    if pol.circuit_breaker:
+        return Decision(False, "Circuit breaker ON")
 
     return Decision(True)

@@ -135,3 +135,6 @@ run-worker: ## Run signal worker (Phase 6)
 
 queue-peek: ## Peek at signal queue (Phase 6)
 	@python -c "import redis; from src.config.settings import settings; r=redis.from_url(settings.REDIS_URL); items=r.lrange(settings.SIGNALS_QUEUE,0,20); print(f'Queue length: {len(items)}'); [print(i.decode()) for i in items]"
+
+run-tpsl: ## Run TP/SL executor (Phase 7)
+	python -m src.services.executors.tpsl_executor
