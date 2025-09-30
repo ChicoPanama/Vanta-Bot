@@ -407,3 +407,39 @@ class Execution(Base):
     reason = Column(String(256), nullable=True)  # rejection reason or error
     created_at = Column(DateTime, default=func.now(), nullable=False)
     updated_at = Column(DateTime, default=func.now(), nullable=False)
+
+
+# ========== Phase 7: Advanced Features & Per-User Risk ==========
+
+
+class UserRiskPolicy(Base):
+    """Per-user risk policy (Phase 7)."""
+
+    __tablename__ = "user_risk_policies"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    tg_user_id = Column(Integer, index=True, unique=True, nullable=False)
+    circuit_breaker = Column(Boolean, default=False, nullable=False)
+    max_leverage_x = Column(Integer, default=20, nullable=False)
+    max_position_usd_1e6 = Column(
+        BigInteger, default=100_000_000, nullable=False
+    )  # $100k
+    daily_loss_limit_1e6 = Column(BigInteger, default=0, nullable=False)  # 0 = disabled
+    updated_at = Column(DateTime, default=func.now(), nullable=False)
+
+
+class TPSL(Base):
+    """Take-Profit / Stop-Loss orders (Phase 7)."""
+
+    __tablename__ = "tp_sl"
+    __table_args__ = (Index("ix_tpsl_user_symbol", "tg_user_id", "symbol"),)
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    tg_user_id = Column(Integer, index=True, nullable=False)
+    symbol = Column(String(32), index=True, nullable=False)
+    is_long = Column(Boolean, nullable=False)
+    take_profit_price = Column(Float, nullable=True)
+    stop_loss_price = Column(Float, nullable=True)
+    active = Column(Boolean, default=True, nullable=False)
+    created_at = Column(DateTime, default=func.now(), nullable=False)
+    meta = Column(Text, default="{}", nullable=False)

@@ -257,3 +257,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Signal payload schema
 - CHANGELOG.md updated
 
+
+## Phase 7: Advanced Features & Per-User Risk (Foundation) — 2025-09-30
+
+### Added
+- **Database models** (Phase 7):
+  - UserRiskPolicy: Per-user risk limits (circuit_breaker, max_leverage, max_position, daily_loss_limit)
+  - TPSL: Take-profit/stop-loss orders (tp_price, sl_price, active status)
+  - Migration: phase7_user_risk_and_tp_sl
+- **Repositories**:
+  - risk_repo: get_or_create_policy(), update_policy()
+  - tpsl_repo: add_tpsl(), list_tpsl(), deactivate_tpsl()
+- **Default limits**: Max leverage 20x, max position $100k, daily loss disabled
+
+### Status
+- Foundation complete (60%)
+- Database infrastructure ready
+- Repositories functional
+
+### Remaining (Phase 7.5)
+- Rules engine integration with per-user policies
+- Partial close UX (25%/50%/100% buttons)
+- TP/SL executor daemon
+- Bot handlers (/risk, /setrisk, /tpsl)
+- Tests and documentation
+
