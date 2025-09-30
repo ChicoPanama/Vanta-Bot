@@ -1,15 +1,14 @@
 """Tests for async DatabaseManager helpers."""
 
 import sys
-from pathlib import Path
-
 import types
+from pathlib import Path
 
 import pytest
 
 try:  # pragma: no cover - optional dependency for local execution
     import sqlalchemy  # noqa: F401
-except ModuleNotFoundError as exc:  # pragma: no cover
+except ModuleNotFoundError:  # pragma: no cover
     sqlalchemy = None  # type: ignore
     pytest.skip("SQLAlchemy not installed", allow_module_level=True)  # type: ignore[misc]
 

@@ -1,11 +1,15 @@
 from __future__ import annotations
+
+from collections.abc import Iterable
 from decimal import Decimal
-from typing import Iterable, Tuple
+
 
 # Each fill: (side, size, price, fee)
 # side: "OPEN" increases position; "CLOSE" decreases (realizes PnL)
-def realized_pnl_fifo(fills: Iterable[Tuple[str, Decimal, Decimal, Decimal]]) -> Decimal:
-    lots: list[Tuple[Decimal, Decimal]] = []  # (size, entry_px)
+def realized_pnl_fifo(
+    fills: Iterable[tuple[str, Decimal, Decimal, Decimal]],
+) -> Decimal:
+    lots: list[tuple[Decimal, Decimal]] = []  # (size, entry_px)
     realized = Decimal("0")
     total_fees = Decimal("0")
 
@@ -19,7 +23,9 @@ def realized_pnl_fifo(fills: Iterable[Tuple[str, Decimal, Decimal, Decimal]]) ->
             while remain > 0 and lots:
                 lot_size, lot_px = lots[0]
                 take = min(lot_size, remain)
-                pnl = (price - lot_px) * take  # long close; adjust sign if short tracking separately
+                pnl = (
+                    price - lot_px
+                ) * take  # long close; adjust sign if short tracking separately
                 realized += pnl
                 lot_size -= take
                 remain -= take

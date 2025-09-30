@@ -1,0 +1,40 @@
+{
+  "network": "base-mainnet",
+  "chainId": 8453,
+  "rpcUrl": "https://mainnet.base.org",
+  "wsUrl": "wss://mainnet.base.org",
+  "contracts": {
+    "trading": {
+      "address": "0x44914408af82bC9983bbb330e3578E1105e11d4e",
+      "type": "proxy",
+      "description": "Current Avantis Trading Proxy",
+      "version": "v2.1.0"
+    },
+    "storage": {
+      "address": "0x81F22d0Cc22977c91bEfE648C9fddf1f2bd977e5",
+      "type": "implementation",
+      "description": "PairInfos Storage Contract"
+    },
+    "usdc": {
+      "address": "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913",
+      "type": "token",
+      "description": "USDC Token Contract"
+    }
+  },
+  "oracles": {
+    "pyth": {
+      "wsUrl": "wss://hermes.pyth.network/ws",
+      "hermesEndpoint": "https://hermes.pyth.network/v2/updates/price/latest"
+    },
+    "chainlink": {
+      "btc_usd": "0x64c911996D3c6aC71f9b455B1E8E7266BcbD848F",
+      "eth_usd": "0x71041dddad3595F9CEd3DcCFBe3D1F4b0a16Bb70",
+      "sol_usd": "0x975043adBb80fc32276CbF9Bbcfd4A601a12462D",
+      "cbbtc_usd": "0x07DA0E54543a844a80ABE69c8A12F22B3aA59f9D",
+      "cbeth_usd": "0xd7818272B9e248357d13057AAb0B417aF31E817d",
+      "aero_usd": "0x4EC5970fC728C5f65ba413992CD5fF6FD70fcfF0"
+    }
+  },
+  "operator": "0x9176E536F21474502B00e30A5dd24461f7EE6DE1",
+  "lastUpdated": "2024-12-19T00:00:00Z"
+}

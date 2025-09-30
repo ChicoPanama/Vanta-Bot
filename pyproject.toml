@@ -3,7 +3,7 @@ requires = ["setuptools>=61.0", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "avantis-telegram-bot"
+name = "vantabot"
 version = "2.1.0"
 description = "Production-ready Avantis trading bot with layered architecture"
 authors = [
@@ -11,7 +11,7 @@ authors = [
 ]
 license = {text = "MIT"}
 readme = "README.md"
-requires-python = ">=3.9"
+requires-python = "==3.11.*"
 classifiers = [
     "Development Status :: 5 - Production/Stable",
     "Intended Audience :: Financial and Insurance Industry",
@@ -57,12 +57,14 @@ dev = [
 ]
 
 [project.scripts]
+vantabot = "vantabot.__main__:main"
 avantis-open-trade = "src.cli.open_trade:main"
 avantis-preflight = "src.cli.preflight:main"
 avantis-monitor = "src.cli.monitor_unpaused:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]
+include = ["vantabot*"]
 
 [tool.black]
 line-length = 88
@@ -90,6 +92,8 @@ extend-exclude = '''
 [tool.ruff]
 target-version = "py39"
 line-length = 88
+
+[tool.ruff.lint]
 select = [
     "E",  # pycodestyle errors
     "W",  # pycodestyle warnings
@@ -103,9 +107,16 @@ ignore = [
     "E501",  # line too long, handled by black
     "B008",  # do not perform function calls in argument defaults
     "C901",  # too complex
+    "B904",  # raise from err/None
+    "E722",  # bare except (legacy code)
+    "F401",  # unused imports (to be cleaned in future phases)
+    "F821",  # undefined name (legacy test code)
+    "E402",  # module import not at top (legacy structure)
+    "F811",  # redefined unused (to be cleaned in future phases)
+    "B017",  # assert raises Exception (test code)
 ]
 
-[tool.ruff.per-file-ignores]
+[tool.ruff.lint.per-file-ignores]
 "__init__.py" = ["F401"]
 
 [tool.isort]
@@ -118,7 +129,7 @@ ensure_newline_before_comments = true
 line_length = 88
 
 [tool.mypy]
-python_version = "3.9"
+python_version = "3.11"
 warn_return_any = true
 warn_unused_configs = true
 disallow_untyped_defs = true

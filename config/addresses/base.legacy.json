@@ -1,0 +1,22 @@
+{
+  "network": "base-mainnet-legacy",
+  "chainId": 8453,
+  "deprecated": true,
+  "deprecatedAt": "2024-12-19T00:00:00Z",
+  "replacement": "0x44914408af82bC9983bbb330e3578E1105e11d4e",
+  "warning": "This address is deprecated and should not be used for new integrations",
+  "contracts": {
+    "trading": {
+      "address": "0x5FF292d70bA9cD9e7CCb313782811b3D7120535f",
+      "type": "proxy",
+      "description": "DEPRECATED: Legacy Avantis Trading Proxy",
+      "version": "v1.x.x",
+      "status": "deprecated"
+    }
+  },
+  "migration": {
+    "reason": "Address changed due to protocol upgrade",
+    "action": "Update all references to use the new proxy address",
+    "newAddress": "0x44914408af82bC9983bbb330e3578E1105e11d4e"
+  }
+}

@@ -1,15 +1,17 @@
-from decimal import Decimal, ROUND_DOWN
+from decimal import ROUND_DOWN, Decimal
+
 from telegram import Update
-from telegram.ext import ContextTypes, CommandHandler
+from telegram.ext import CommandHandler, ContextTypes
 
-from src.services.risk_calculator import risk_calculator, RiskLevel
-from src.config.settings import settings
-from src.bot.middleware.user_middleware import UserMiddleware
 from src.blockchain.wallet_manager import wallet_manager
+from src.bot.middleware.user_middleware import UserMiddleware
+from src.config.settings import settings
 from src.database.operations import db
+from src.services.risk_calculator import risk_calculator
 
-logger = __import__('src.utils.logging', fromlist=['get_logger']).get_logger(__name__)
+logger = __import__("src.utils.logging", fromlist=["get_logger"]).get_logger(__name__)
 user_middleware = UserMiddleware()
+
 
 # Helpers
 async def _get_account_balance_usd(user_id: int) -> Decimal:
@@ -18,34 +20,36 @@ async def _get_account_balance_usd(user_id: int) -> Decimal:
         db_user = await db.get_user(user_id)
         if not db_user:
             return Decimal("10000")  # Default for demo
-        
+
         wallet_info = wallet_manager.get_wallet_info(db_user.wallet_address)
-        return Decimal(str(wallet_info.get('usdc_balance', 10000)))
+        return Decimal(str(wallet_info.get("usdc_balance", 10000)))
     except Exception as e:
         logger.warning(f"Could not get balance for user {user_id}: {e}")
         return Decimal("10000")  # Default fallback
+
 
 def _fmt_usd(x: Decimal) -> str:
     """Format USD amount"""
     return f"${x:,.2f}"
 
+
 def _emoji_for(level: str) -> str:
     """Get emoji for risk level"""
     emojis = {
         "conservative": "🟢",
-        "moderate": "🟡", 
+        "moderate": "🟡",
         "aggressive": "🟠",
-        "extreme": "🔴"
+        "extreme": "🔴",
     }
     return emojis.get(level, "🟡")
+
 
 @user_middleware.require_user
 async def cmd_analyze(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Usage: /analyze <ASSET> <SIZE_USD> <LEVERAGE>  (education only)"""
     if not settings.RISK_EDUCATION_ENABLED:
         await update.effective_message.reply_text(
-            "📊 Risk education is currently disabled.",
-            parse_mode="Markdown"
+            "📊 Risk education is currently disabled.", parse_mode="Markdown"
         )
         return
 
@@ -104,22 +108,22 @@ async def cmd_analyze(update: Update, context: ContextTypes.DEFAULT_TYPE):
     except ValueError as e:
         await update.effective_message.reply_text(
             f"❌ Error: {str(e)}\n\nPlease check your inputs and try again.",
-            parse_mode="Markdown"
+            parse_mode="Markdown",
         )
     except Exception as e:
         logger.error(f"Error in analyze command: {e}")
         await update.effective_message.reply_text(
             "❌ An error occurred while analyzing. Please try again.",
-            parse_mode="Markdown"
+            parse_mode="Markdown",
         )
+
 
 @user_middleware.require_user
 async def cmd_calc(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Usage: /calc <ASSET> <LEVERAGE> [risk_pct]  — suggest sizes"""
     if not settings.RISK_EDUCATION_ENABLED:
         await update.effective_message.reply_text(
-            "🧮 Risk education is currently disabled.",
-            parse_mode="Markdown"
+            "🧮 Risk education is currently disabled.", parse_mode="Markdown"
         )
         return
 
@@ -141,19 +145,21 @@ async def cmd_calc(update: Update, context: ContextTypes.DEFAULT_TYPE):
         risk_pct = Decimal(args[2]) / Decimal(100) if len(args) > 2 else None
 
         bal = await _get_account_balance_usd(update.effective_user.id)
-        
+
         # Suggest sizes using the same assumptions as the calculator
         def size_for(rpct: Decimal) -> Decimal:
             max_loss = bal * rpct
-            return (max_loss / Decimal("0.02")).quantize(Decimal("0.01"), rounding=ROUND_DOWN)
+            return (max_loss / Decimal("0.02")).quantize(
+                Decimal("0.01"), rounding=ROUND_DOWN
+            )
 
         if risk_pct:
             size = size_for(risk_pct)
             edu = await risk_calculator.analyze(
-                position_size_usd=size, 
-                leverage=lev, 
-                account_balance_usd=bal, 
-                asset=asset
+                position_size_usd=size,
+                leverage=lev,
+                account_balance_usd=bal,
+                asset=asset,
             )
             msg = (
                 f"🧮 *{asset}* at {lev}x\n"
@@ -174,20 +180,21 @@ async def cmd_calc(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 f"🟠 **Aggressive (10% risk):** {_fmt_usd(agg)}\n\n"
                 f"_Based on {_fmt_usd(bal)} account balance._"
             )
-            
+
         await update.effective_message.reply_text(msg, parse_mode="Markdown")
 
     except ValueError as e:
         await update.effective_message.reply_text(
             f"❌ Error: {str(e)}\n\nPlease check your inputs and try again.",
-            parse_mode="Markdown"
+            parse_mode="Markdown",
         )
     except Exception as e:
         logger.error(f"Error in calc command: {e}")
         await update.effective_message.reply_text(
             "❌ An error occurred while calculating. Please try again.",
-            parse_mode="Markdown"
+            parse_mode="Markdown",
         )
+
 
 def register_risk_edu_handlers(dispatcher):
     """Register risk education handlers"""

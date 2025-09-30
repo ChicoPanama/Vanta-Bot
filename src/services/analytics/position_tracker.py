@@ -1,15 +1,15 @@
 # src/services/analytics/position_tracker.py
 from __future__ import annotations
+
 import asyncio
 import os
 from datetime import datetime, timedelta, timezone
-from typing import Dict, Any, List, Optional
+from typing import Any
 
 import redis.asyncio as redis
 from loguru import logger
 from sqlalchemy import text
 from sqlalchemy.engine import Engine
-from sqlalchemy.orm import Session
 
 REDIS_URL = os.getenv("REDIS_URL", "redis://localhost:6379")
 
@@ -18,6 +18,7 @@ ACTIVE_HOURS = int(os.getenv("LEADER_ACTIVE_HOURS", "72"))
 MIN_TRADES_30D = int(os.getenv("LEADER_MIN_TRADES_30D", "300"))
 MIN_VOL_30D = float(os.getenv("LEADER_MIN_VOLUME_30D_USD", "10000000"))
 
+
 class PositionTracker:
     """
     Aggregates normalized fills/positions into per-address stats every 60s.
@@ -25,9 +26,10 @@ class PositionTracker:
       address, pair, is_long, size_usd, price, fee, side, ts, maker_taker
     Replace SQL with your actual schema.
     """
+
     def __init__(self, engine: Engine) -> None:
         self.engine = engine
-        self.redis: Optional[redis.Redis] = None
+        self.redis: redis.Redis | None = None
         self.running = False
 
     async def start(self) -> None:
@@ -35,11 +37,11 @@ class PositionTracker:
         if self.running:
             logger.warning("PositionTracker already running")
             return
-            
+
         self.running = True
         self.redis = await redis.from_url(REDIS_URL, decode_responses=True)
         logger.info("PositionTracker started with Redis {}", REDIS_URL)
-        
+
         try:
             while self.running:
                 try:
@@ -59,10 +61,11 @@ class PositionTracker:
     async def _compute_30d(self) -> None:
         """Compute 30-day statistics for all traders"""
         since = int((datetime.now(timezone.utc) - timedelta(days=30)).timestamp())
-        
+
         # EXAMPLE SQL: adjust to your tables/columns
         # This assumes you have a 'fills' table with the indexed data
-        sql = text("""
+        sql = text(
+            """
             with window_fills as (
               select address,
                      pair,
@@ -84,9 +87,10 @@ class PositionTracker:
             )
             select *
             from per_addr
-        """)
-        
-        rows: List[Dict[str, Any]] = []
+        """
+        )
+
+        rows: list[dict[str, Any]] = []
         try:
             with self.engine.begin() as conn:
                 result = conn.execute(sql, {"since": since})
@@ -94,7 +98,10 @@ class PositionTracker:
                     rows.append(dict(r._mapping))
         except Exception as e:
             # If the fills table doesn't exist yet, create a mock structure
-            logger.warning("Fills table not found or error executing query: {}. Using mock data.", e)
+            logger.warning(
+                "Fills table not found or error executing query: {}. Using mock data.",
+                e,
+            )
             rows = await self._create_mock_stats()
 
         # Persist to a stats table via SQLAlchemy ORM or Core (adjust to your models).
@@ -108,47 +115,50 @@ class PositionTracker:
                 pipe.hset(key, mapping={k: str(v) for k, v in r.items()})
                 pipe.expire(key, 120)
             await pipe.execute()
-            
+
         logger.info("PositionTracker updated {} addresses (30D window)", len(rows))
 
-    async def _create_mock_stats(self) -> List[Dict[str, Any]]:
+    async def _create_mock_stats(self) -> list[dict[str, Any]]:
         """Create mock statistics for testing when no real data is available"""
         mock_addresses = [
             "0x1234567890123456789012345678901234567890",
-            "0x2345678901234567890123456789012345678901", 
-            "0x3456789012345678901234567890123456789012"
+            "0x2345678901234567890123456789012345678901",
+            "0x3456789012345678901234567890123456789012",
         ]
-        
+
         rows = []
         for addr in mock_addresses:
-            rows.append({
-                "address": addr,
-                "trade_count_30d": 450,  # Above minimum
-                "last_30d_volume_usd": 15000000.0,  # Above minimum
-                "median_trade_size_usd": 25000.0,
-                "last_trade_at": int(datetime.now().timestamp()) - 3600  # 1 hour ago
-            })
-        
+            rows.append(
+                {
+                    "address": addr,
+                    "trade_count_30d": 450,  # Above minimum
+                    "last_30d_volume_usd": 15000000.0,  # Above minimum
+                    "median_trade_size_usd": 25000.0,
+                    "last_trade_at": int(datetime.now().timestamp())
+                    - 3600,  # 1 hour ago
+                }
+            )
+
         return rows
 
-    async def get_stats(self, address: str) -> Dict[str, Any]:
+    async def get_stats(self, address: str) -> dict[str, Any]:
         """Get cached statistics for a specific address"""
         if not self.redis:
             self.redis = await redis.from_url(REDIS_URL, decode_responses=True)
-            
+
         key = f"stats:{WINDOW}:{address.lower()}"
         data = await self.redis.hgetall(key)
         return data or {}
 
-    async def get_leaderboard(self, limit: int = 50) -> List[Dict[str, Any]]:
+    async def get_leaderboard(self, limit: int = 50) -> list[dict[str, Any]]:
         """Get top traders based on cached statistics"""
         if not self.redis:
             self.redis = await redis.from_url(REDIS_URL, decode_responses=True)
-        
+
         # Get all stats keys
         pattern = f"stats:{WINDOW}:*"
         keys = await self.redis.keys(pattern)
-        
+
         leaders = []
         for key in keys:
             data = await self.redis.hgetall(key)
@@ -158,23 +168,33 @@ class PositionTracker:
                     trade_count = int(data.get("trade_count_30d", 0))
                     volume = float(data.get("last_30d_volume_usd", 0))
                     last_trade = int(data.get("last_trade_at", 0))
-                    
+
                     # Check if trader meets minimum requirements
-                    if (trade_count >= MIN_TRADES_30D and 
-                        volume >= MIN_VOL_30D and 
-                        last_trade >= int(datetime.now().timestamp()) - (ACTIVE_HOURS * 3600)):
-                        
-                        leaders.append({
-                            "address": data.get("address", ""),
-                            "trade_count_30d": trade_count,
-                            "last_30d_volume_usd": volume,
-                            "median_trade_size_usd": float(data.get("median_trade_size_usd", 0)),
-                            "last_trade_at": last_trade,
-                            "copyability_score": min(100, (trade_count / MIN_TRADES_30D) * 50 + (volume / MIN_VOL_30D) * 50)
-                        })
+                    if (
+                        trade_count >= MIN_TRADES_30D
+                        and volume >= MIN_VOL_30D
+                        and last_trade
+                        >= int(datetime.now().timestamp()) - (ACTIVE_HOURS * 3600)
+                    ):
+                        leaders.append(
+                            {
+                                "address": data.get("address", ""),
+                                "trade_count_30d": trade_count,
+                                "last_30d_volume_usd": volume,
+                                "median_trade_size_usd": float(
+                                    data.get("median_trade_size_usd", 0)
+                                ),
+                                "last_trade_at": last_trade,
+                                "copyability_score": min(
+                                    100,
+                                    (trade_count / MIN_TRADES_30D) * 50
+                                    + (volume / MIN_VOL_30D) * 50,
+                                ),
+                            }
+                        )
                 except (ValueError, TypeError):
                     continue
-        
+
         # Sort by copyability score
         leaders.sort(key=lambda x: x["copyability_score"], reverse=True)
         return leaders[:limit]

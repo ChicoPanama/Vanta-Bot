@@ -1,201 +1,90 @@
 # Changelog
 
-All notable changes to the Avantis Trading Bot will be documented in this file.
+All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [2.1.0] - 2024-12-19
+## [Unreleased]
 
-### 🚀 Added
-- **Layered Architecture**: Complete refactor with clean module boundaries
-  - `src/core/`: Pure business logic with no I/O dependencies
-  - `src/adapters/`: External system interfaces (Web3, Pyth, etc.)
-  - `src/services/`: Business orchestration and coordination
-  - `src/cli/`: Command-line interfaces for trading operations
-- **Single-Scaling Invariant**: Authoritative scaling functions prevent double-scaling
-  - `to_trade_units()`: Single source of truth for parameter scaling
-  - `validate_scaling_consistency()`: Detects and prevents double-scaling
-  - Comprehensive unit tests for scaling functions
-- **Comprehensive Validation**: Multi-layer validation system
-  - Human parameter validation with business rules
-  - Contract limit validation against on-chain values
-  - Risk management validation with configurable limits
-  - Parameter clamping to safe ranges
-- **CLI Tools**: Clean command-line interfaces
-  - `open_trade.py`: Execute trades with human-readable parameters
-  - `preflight.py`: Comprehensive validation and status checking
-  - `monitor_unpaused.py`: Contract unpause monitoring
-- **Address Protection**: Legacy address detection and prevention
-  - `address_guard.py`: Startup validation against deprecated addresses
-  - Clear error messages with remediation instructions
-  - Separate current vs legacy address configurations
-- **Extensive Testing**: Comprehensive test suite
-  - Unit tests for core business logic (fast, isolated)
-  - Integration tests for external system interactions
-  - E2E tests for complete workflows (disabled by default)
-  - Proper test separation with pytest markers
-- **Modern Tooling**: Production-ready development tools
-  - Pre-commit hooks with security scanning
-  - CI/CD pipeline with automated testing
-  - Code formatting with Black and isort
-  - Linting with Ruff and type checking with mypy
-  - Coverage reporting and security scanning
+### Added (Phase 1: Secrets & Safety)
+- KMS-first signer with local dev fallback (`src/blockchain/signers/factory.py`)
+- Envelope encryption utilities (AES-GCM + KMS) in `src/security/crypto.py`
+- Encrypted SQLAlchemy types: `EncryptedBytes`, `EncryptedJSON`, `EncryptedString`
+- API credentials model with envelope encryption
+- Credentials repository API for encrypted secret storage
+- Startup validators for signer and encryption config
+- DEK rotation script (`scripts/rewrap_deks.py`) with `make rotate-deks`
+- Comprehensive unit and integration tests for crypto, signers, encrypted types
 
-### 🔧 Changed
-- **BREAKING**: Complete architecture refactor
-  - All trading logic moved to layered architecture
-  - SDK integration replaced with direct contract calls
-  - Configuration moved to structured JSON files
-- **BREAKING**: Environment configuration
-  - Environment files moved to `env/` directory
-  - `.env` files now properly gitignored
-  - Template provided in `env/.env.example`
-- **BREAKING**: Test structure
-  - Tests reorganized into unit/integration/e2e
-  - Integration tests require RPC access
-  - E2E tests disabled by default for safety
+### Added (Phase 0: Baseline Hygiene)
+- Clean package structure with `src/vantabot/` organization
+- Proper separation of production code and test/debug scripts
+- Comprehensive documentation structure
+- GitHub Actions CI/CD pipeline with secret scanning
+- Pre-commit hooks for code quality
+- Type checking with MyPy
+- Code formatting with Ruff
+- Phase gate scaffolding: `PHASE_STATE.md`, planning docs, PR template
+- CI `phase_gate` and `verify_release` jobs; `scripts/verify_release.py`
+- Python 3.11 pinned across project
+- `.env.example` with placeholder configuration
 
-### 🐛 Fixed
-- **SDK Double-Scaling**: Resolved double-scaling issue that caused 1% slippage to become 100,000,000%
-  - Root cause: SDK auto-scaling + manual pre-scaling = double-scaling
-  - Solution: Direct contract calls with authoritative single scaling
-  - Validation: Comprehensive tests ensure no regression
-- **INVALID_SLIPPAGE Errors**: Fixed slippage validation issues
-  - Problem: Double-scaled slippage exceeded contract limits
-  - Solution: Proper single scaling with contract limit validation
-- **BELOW_MIN_POS Errors**: Fixed position size validation
-  - Problem: Incorrect position size calculations
-  - Solution: Proper scaling and validation pipeline
-- **Contract Integration**: Improved contract interaction reliability
-  - Better error handling and decoding
-  - Proper proxy address usage with implementation ABI
-  - Staticcall validation before transaction execution
+### Changed
+- Moved all test scripts to `tests/` directory structure
+- Archived debug/experimental scripts to `tests/archive/`
+- Reorganized configuration management
+- Improved project hygiene and development workflow
 
-### 🛡️ Security
-- **Secret Management**: Comprehensive secret protection
-  - All secrets moved to environment variables
-  - No hardcoded credentials in codebase
-  - Secure key storage with envelope encryption
-- **Address Validation**: Protection against deprecated addresses
-  - Startup validation prevents deprecated address usage
-  - Clear error messages with remediation steps
-  - Separate legacy and current address configurations
-- **Input Validation**: Multi-layer input validation
-  - Business rule enforcement
-  - Risk limit validation
-  - Parameter clamping to safe ranges
+### Security
+- Enhanced security documentation
+- Improved secret management guidelines
+- Added vulnerability reporting process
+- KMS-first signing (Phase 1: production-safe key management)
+- Envelope encryption for DB secrets (AES-GCM + KMS key wrapping)
+- Startup warnings for local signer usage
 
-### 📊 Performance
-- **Faster Testing**: Unit tests run in < 1 second each
-- **Parallel Execution**: Integration tests can run in parallel
-- **Efficient Validation**: Optimized validation pipeline
-- **Reduced Dependencies**: Direct contract calls reduce SDK overhead
+## [2.1.0] - 2024-01-XX
 
-### 📚 Documentation
-- **Comprehensive README**: Complete setup and usage guide
-- **Security Policy**: Detailed security practices and incident response
-- **API Documentation**: Full API documentation with examples
-- **Architecture Guide**: Detailed architecture explanation
-
-## [2.0.0] - Previous Version
+### Added
+- Production-ready Avantis trading bot
+- Telegram integration with advanced trading commands
+- Copy trading functionality
+- Risk management and position monitoring
+- Multi-chain support (Base network)
+- Advanced analytics and reporting
+- Docker containerization
+- Comprehensive monitoring and health checks
 
 ### Features
-- Basic trading functionality with Avantis SDK
-- Telegram bot integration
-- Copy trading capabilities
-- Basic risk management
+- Real-time price feeds (Chainlink, Pyth)
+- Automated trading strategies
+- Portfolio management
+- Risk education and user onboarding
+- Admin controls and monitoring
+- Database persistence with SQLAlchemy
+- Redis caching and coordination
+- Background service management
 
-### Issues
-- SDK double-scaling problems
-- Monolithic architecture
-- Limited validation
-- Basic error handling
-- No address protection
+### Security
+- AES-256 encrypted private key storage
+- KMS integration for production
+- Rate limiting and DDoS protection
+- Input validation and sanitization
+- Secure configuration management
 
-## [1.0.0] - Initial Release
+## [2.0.0] - 2024-01-XX
 
-### Features
-- Initial bot implementation
+### Added
+- Initial release of Vanta Bot
 - Basic trading functionality
-- Simple user interface
+- Telegram bot integration
+- Avantis Protocol integration
 
 ---
 
-## Migration Guide
+## Version History
 
-### From v2.0.0 to v2.1.0
-
-1. **Update Environment Configuration**:
-   ```bash
-   # Move .env to env/.env
-   mv .env env/.env
-   ```
-
-2. **Update Import Statements**:
-   ```python
-   # Old
-   from src.blockchain.avantis_client import AvantisClient
-   
-   # New
-   from src.services.trade_service import TradeService
-   ```
-
-3. **Update Trading Code**:
-   ```python
-   # Old - with SDK double-scaling issues
-   sdk.open_trade(collateral, leverage, slippage)
-   
-   # New - with proper single scaling
-   trade_service = TradeService(rpc_url, private_key)
-   result = await trade_service.open_market_trade(params, dry_run=False)
-   ```
-
-4. **Update Configuration**:
-   ```python
-   # Old - hardcoded addresses
-   TRADING_CONTRACT = "0x5FF2..."
-   
-   # New - structured configuration
-   with open("config/addresses/base.mainnet.json") as f:
-       config = json.load(f)
-   trading_address = config["contracts"]["trading"]["address"]
-   ```
-
-### Breaking Changes
-
-- **Architecture**: Complete refactor to layered architecture
-- **Scaling**: SDK integration replaced with direct contract calls
-- **Configuration**: Environment files moved to `env/` directory
-- **Testing**: Test structure completely reorganized
-- **CLI**: New command-line interfaces replace old scripts
-
-## Success Metrics
-
-### v2.1.0 Achievements
-- ✅ **100% Unit Test Coverage**: All core business logic tested
-- ✅ **Zero Double-Scaling**: Authoritative scaling prevents regression
-- ✅ **Production Ready**: Comprehensive validation and error handling
-- ✅ **Security Hardened**: No secrets in code, address protection
-- ✅ **Developer Experience**: Modern tooling and clear documentation
-
-### Verified Success
-- **Successful Live Trade**: Transaction hash `0xebd000a15b863286e2060601b5a58073821cca71116f80ad8edca31998daead6`
-- **BaseScan URL**: https://basescan.org/tx/0xebd000a15b863286e2060601b5a58073821cca71116f80ad8edca31998daead6
-- **No Scaling Issues**: All parameters correctly scaled and validated
-- **Clean Architecture**: Clear separation of concerns and maintainable code
-- **Refactored Architecture Verified**: Core scaling functions tested and working correctly
-  - ✅ Single-scaling invariant enforced (`to_trade_units()` function)
-  - ✅ Parameter validation working (comprehensive validation pipeline)
-  - ✅ Contract integration working (successful connection and status checks)
-  - ✅ Double-scaling detection working (prevents regression)
-
----
-
-**Legend**:
-- 🚀 Added: New features
-- 🔧 Changed: Changes to existing functionality
-- 🐛 Fixed: Bug fixes
-- 🛡️ Security: Security improvements
-- 📊 Performance: Performance improvements
-- 📚 Documentation: Documentation updates
+- **2.1.0**: Production-ready release with full feature set
+- **2.0.0**: Initial release with core functionality
+- **1.x.x**: Development and testing phases (not released)

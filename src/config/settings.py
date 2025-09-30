@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import os
 from functools import lru_cache
-from typing import List, Optional, Union
 
 from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -20,30 +19,39 @@ class Settings(BaseSettings):
     LOG_JSON: bool = Field(False, env="LOG_JSON")
 
     # Telegram / bot
-    TELEGRAM_BOT_TOKEN: Optional[str] = Field(None, env="TELEGRAM_BOT_TOKEN")
+    TELEGRAM_BOT_TOKEN: str | None = Field(None, env="TELEGRAM_BOT_TOKEN")
 
     # Blockchain / Base network
     BASE_RPC_URL: str = Field("https://mainnet.base.org", env="BASE_RPC_URL")
     BASE_CHAIN_ID: int = Field(8453, env="BASE_CHAIN_ID")
-    BASE_WS_URL: Optional[str] = Field(None, env="BASE_WS_URL")
+    BASE_WS_URL: str | None = Field(None, env="BASE_WS_URL")
 
     # Data stores
     DATABASE_URL: str = Field("sqlite+aiosqlite:///vanta_bot.db", env="DATABASE_URL")
     REDIS_URL: str = Field("redis://localhost:6379/0", env="REDIS_URL")
 
     # Security & secrets
-    ENCRYPTION_KEY: Optional[str] = Field(None, env="ENCRYPTION_KEY")
-    TRADER_PRIVATE_KEY: Optional[str] = Field(None, env="TRADER_PRIVATE_KEY")
-    AWS_KMS_KEY_ID: Optional[str] = Field(None, env="AWS_KMS_KEY_ID")
+    ENCRYPTION_KEY: str | None = Field(None, env="ENCRYPTION_KEY")
+    TRADER_PRIVATE_KEY: str | None = Field(None, env="TRADER_PRIVATE_KEY")
+
+    # Signing backends (Phase 1: KMS-first)
+    SIGNER_BACKEND: str = Field("kms", env="SIGNER_BACKEND")  # kms|local
+    PRIVATE_KEY: str | None = Field(None, env="PRIVATE_KEY")  # dev only
+    KMS_KEY_ID: str | None = Field(None, env="KMS_KEY_ID")  # AWS KMS key ID
+    AWS_KMS_KEY_ID: str | None = Field(None, env="AWS_KMS_KEY_ID")  # Legacy compat
     AWS_REGION: str = Field("us-east-1", env="AWS_REGION")
-    
+
+    # Envelope encryption (Phase 1)
+    ENCRYPTION_CONTEXT_APP: str = Field("vanta-bot", env="ENCRYPTION_CONTEXT_APP")
+    ENCRYPTION_DEK_BYTES: int = Field(32, env="ENCRYPTION_DEK_BYTES")  # 256-bit DEK
+
     # Key vault settings
-    LOCAL_WRAP_KEY_B64: Optional[str] = Field(None, env="LOCAL_WRAP_KEY_B64")
+    LOCAL_WRAP_KEY_B64: str | None = Field(None, env="LOCAL_WRAP_KEY_B64")
     KEY_ENVELOPE_ENABLED: bool = Field(False, env="KEY_ENVELOPE_ENABLED")
 
     # Contracts / protocol
-    AVANTIS_TRADING_CONTRACT: Optional[str] = Field(None, env="AVANTIS_TRADING_CONTRACT")
-    AVANTIS_VAULT_CONTRACT: Optional[str] = Field(None, env="AVANTIS_VAULT_CONTRACT")
+    AVANTIS_TRADING_CONTRACT: str | None = Field(None, env="AVANTIS_TRADING_CONTRACT")
+    AVANTIS_VAULT_CONTRACT: str | None = Field(None, env="AVANTIS_VAULT_CONTRACT")
     USDC_CONTRACT: str = Field(
         "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913", env="USDC_CONTRACT"
     )
@@ -60,19 +68,21 @@ class Settings(BaseSettings):
     LEADER_ACTIVE_HOURS: int = Field(72, env="LEADER_ACTIVE_HOURS")
     LEADER_MIN_TRADES_30D: int = Field(300, env="LEADER_MIN_TRADES_30D")
     LEADER_MIN_VOLUME_30D_USD: int = Field(10_000_000, env="LEADER_MIN_VOLUME_30D_USD")
-    
-    # Indexer settings
-    INDEXER_BACKFILL_RANGE: int = Field(1000, env="INDEXER_BACKFILL_RANGE")  # Number of blocks to backfill
+
+    # Indexer settings (initial default)
+    INDEXER_BACKFILL_RANGE_INITIAL: int = Field(
+        1000, env="INDEXER_BACKFILL_RANGE"
+    )  # Number of blocks to backfill
 
     # Rate limiting & monitoring
     COPY_EXECUTION_RATE_LIMIT: int = Field(10, env="COPY_EXECUTION_RATE_LIMIT")
     TELEGRAM_MESSAGE_RATE_LIMIT: int = Field(30, env="TELEGRAM_MESSAGE_RATE_LIMIT")
     ENABLE_METRICS: bool = Field(True, env="ENABLE_METRICS")
-    SENTRY_DSN: Optional[str] = Field(None, env="SENTRY_DSN")
+    SENTRY_DSN: str | None = Field(None, env="SENTRY_DSN")
 
     # Admin & control flags (accept CSV strings in env for tests)
-    ADMIN_USER_IDS: Union[List[int], str] = Field(default_factory=list)
-    SUPER_ADMIN_IDS: Union[List[int], str] = Field(default_factory=list)
+    ADMIN_USER_IDS: list[int] | str = Field(default_factory=list)
+    SUPER_ADMIN_IDS: list[int] | str = Field(default_factory=list)
 
     EMERGENCY_STOP: bool = Field(False, env="EMERGENCY_STOP")
     EMERGENCY_STOP_COPY_TRADING: bool = Field(False, env="EMERGENCY_STOP_COPY_TRADING")
@@ -81,11 +91,13 @@ class Settings(BaseSettings):
 
     # Health & diagnostics
     HEALTH_PORT: int = Field(8080, env="HEALTH_PORT")
-    
+
     # Indexer / backfill configuration
     INDEXER_BACKFILL_RANGE: int = Field(50_000, env="INDEXER_BACKFILL_RANGE")
 
-    model_config = SettingsConfigDict(env_file=".env", case_sensitive=False)
+    model_config = SettingsConfigDict(
+        env_file=".env", case_sensitive=False, extra="ignore"
+    )
 
     # ------------------------------------------------------------------
     # Validators / helpers
@@ -127,6 +139,7 @@ class Settings(BaseSettings):
             # Try JSON array first
             if s.startswith("[") and s.endswith("]"):
                 import json
+
                 arr = json.loads(s)
                 return [int(v) for v in arr]
             # Fallback to CSV (strict: any non-digit token => empty list)
@@ -146,6 +159,14 @@ class Settings(BaseSettings):
             raise ValueError("COPY_EXECUTION_MODE must be either 'DRY' or 'LIVE'")
         return value
 
+    @field_validator("SIGNER_BACKEND", mode="before")
+    def _validate_signer_backend(cls, value: str) -> str:
+        """Validate signer backend is kms or local."""
+        value = (value or "kms").lower().strip()
+        if value not in {"kms", "local"}:
+            raise ValueError("SIGNER_BACKEND must be either 'kms' or 'local'")
+        return value
+
     # ------------------------------------------------------------------
     # Compatibility helpers (mirroring previous API)
 
@@ -153,7 +174,12 @@ class Settings(BaseSettings):
         """Validate required configuration at startup."""
         runtime_mode = os.getenv("RUNTIME_MODE", "BOT").upper()
 
-        core_required = ["TELEGRAM_BOT_TOKEN", "DATABASE_URL", "BASE_RPC_URL", "ENCRYPTION_KEY"]
+        core_required = [
+            "TELEGRAM_BOT_TOKEN",
+            "DATABASE_URL",
+            "BASE_RPC_URL",
+            "ENCRYPTION_KEY",
+        ]
         bot_required = core_required + ["REDIS_URL"]
         indexer_required = core_required + ["AVANTIS_TRADING_CONTRACT"]
         sdk_required = core_required + ["AVANTIS_TRADING_CONTRACT", "USDC_CONTRACT"]
@@ -189,17 +215,24 @@ class Settings(BaseSettings):
         if self.AWS_KMS_KEY_ID:
             try:
                 import boto3
+
                 kms_client = boto3.client("kms", region_name=self.AWS_REGION)
                 from src.security.key_vault import AwsKmsKeyVault
-                return AwsKmsKeyVault(kms_key_id=self.AWS_KMS_KEY_ID, kms_client=kms_client)
+
+                return AwsKmsKeyVault(
+                    kms_key_id=self.AWS_KMS_KEY_ID, kms_client=kms_client
+                )
             except ImportError:
                 raise ValueError("boto3 required for AWS KMS key vault")
-        
+
         if self.LOCAL_WRAP_KEY_B64:
             from src.security.key_vault import LocalFernetKeyVault
+
             return LocalFernetKeyVault(self.LOCAL_WRAP_KEY_B64)
-        
-        raise ValueError("Either AWS_KMS_KEY_ID or LOCAL_WRAP_KEY_B64 must be configured")
+
+        raise ValueError(
+            "Either AWS_KMS_KEY_ID or LOCAL_WRAP_KEY_B64 must be configured"
+        )
 
     # ------------------------------------------------------------------
     # Compatibility properties (legacy lower-case accessors)
@@ -210,12 +243,12 @@ class Settings(BaseSettings):
         return self.DEFAULT_SLIPPAGE_PCT
 
     @property
-    def trading_contract(self) -> Optional[str]:
+    def trading_contract(self) -> str | None:
         """Legacy accessor mapping to AVANTIS_TRADING_CONTRACT."""
         return self.AVANTIS_TRADING_CONTRACT
 
     @property
-    def vault_contract(self) -> Optional[str]:
+    def vault_contract(self) -> str | None:
         return self.AVANTIS_VAULT_CONTRACT
 
     @property
@@ -232,7 +265,9 @@ class Settings(BaseSettings):
             db_display = f"{db_url.split(':', 1)[0]}://..." if ":" in db_url else db_url
 
         redis_url = self.REDIS_URL or ""
-        redis_display = f"{redis_url.split(':', 1)[0]}://..." if ":" in redis_url else redis_url
+        redis_display = (
+            f"{redis_url.split(':', 1)[0]}://..." if ":" in redis_url else redis_url
+        )
 
         contract_preview = (
             f"{self.AVANTIS_TRADING_CONTRACT[:12]}..."
@@ -256,7 +291,7 @@ class Settings(BaseSettings):
         )
 
 
-@lru_cache()
+@lru_cache
 def get_settings() -> Settings:
     """Return a cached settings instance."""
     return Settings()
@@ -269,5 +304,6 @@ config: Settings = settings  # Backwards compatibility alias
 
 class Config(Settings):  # legacy compatibility: behave like Settings
     pass
+
 
 __all__ = ["Settings", "settings", "config", "get_settings", "Config"]

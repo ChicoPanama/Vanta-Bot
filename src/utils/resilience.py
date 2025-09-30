@@ -5,7 +5,8 @@ from __future__ import annotations
 import asyncio
 import logging
 import time
-from typing import Any, Awaitable, Callable, Iterable, Optional, Tuple, Type
+from collections.abc import Awaitable
+from typing import Any, Callable
 
 logger = logging.getLogger(__name__)
 
@@ -17,7 +18,7 @@ class CircuitBreaker:
         self.fail_threshold = fail_threshold
         self.reset_after = reset_after
         self.failures = 0
-        self.opened_at: Optional[float] = None
+        self.opened_at: float | None = None
 
     def is_open(self) -> bool:
         if self.opened_at is None:
@@ -48,10 +49,10 @@ async def with_retries(
     *,
     retries: int = 3,
     backoff: float = 0.5,
-    exceptions: Tuple[Type[BaseException], ...] = (Exception,),
+    exceptions: tuple[type[BaseException], ...] = (Exception,),
 ) -> Any:
     """Retry *fn* with exponential backoff."""
-    last_exc: Optional[BaseException] = None
+    last_exc: BaseException | None = None
     for attempt in range(retries + 1):
         try:
             return await fn()

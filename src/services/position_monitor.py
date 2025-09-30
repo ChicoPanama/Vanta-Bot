@@ -9,11 +9,12 @@ from src.services.price_service import price_service
 
 logger = logging.getLogger(__name__)
 
+
 class PositionMonitor:
     def __init__(self):
         self.bot = Bot(config.TELEGRAM_BOT_TOKEN)
         self.check_interval = 30  # seconds
-        
+
     async def monitor_positions(self):
         """Monitor all open positions"""
         while True:
@@ -29,30 +30,34 @@ class PositionMonitor:
                 logger.error(f"Error monitoring positions: {e}")
 
             await asyncio.sleep(self.check_interval)
-            
+
     async def check_position(self, position):
         """Check individual position for updates"""
         try:
             current_price = price_service.get_price(position.symbol)
             if not current_price:
                 return
-                
+
             # Update current price
             position.current_price = current_price
-            
+
             # Calculate PnL
-            if position.side == 'LONG':
-                pnl_ratio = (current_price - position.entry_price) / position.entry_price
+            if position.side == "LONG":
+                pnl_ratio = (
+                    current_price - position.entry_price
+                ) / position.entry_price
             else:  # SHORT
-                pnl_ratio = (position.entry_price - current_price) / position.entry_price
-                
+                pnl_ratio = (
+                    position.entry_price - current_price
+                ) / position.entry_price
+
             position.pnl = position.size * position.leverage * pnl_ratio
-            
+
             # Check for liquidation
             liquidation_threshold = -0.95  # 95% loss triggers liquidation
             if pnl_ratio <= liquidation_threshold:
                 await self.liquidate_position(position)
-                
+
             # Persist updates
             await db.update_position(
                 position.id,
@@ -66,7 +71,7 @@ class PositionMonitor:
     async def liquidate_position(self, position):
         """Handle position liquidation"""
         try:
-            await db.update_position(position.id, status='LIQUIDATED')
+            await db.update_position(position.id, status="LIQUIDATED")
 
             # Notify user
             user = await db.get_user_by_id(position.user_id)
@@ -79,15 +84,16 @@ Side: {position.side}
 Size: ${position.size:,.2f}
 Loss: ${position.pnl:,.2f}
                 """
-                
+
                 await self.bot.send_message(
                     chat_id=user.telegram_id,
                     text=liquidation_msg,
-                    parse_mode='Markdown'
+                    parse_mode="Markdown",
                 )
-                
+
         except Exception as e:
             logger.error(f"Error liquidating position: {e}")
+
 
 # Global instance
 position_monitor = PositionMonitor()

@@ -1,33 +1,41 @@
-from typing import List, Dict, Any
-from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
+from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
 from telegram.ext import ContextTypes
 
-from src.database.operations import db
-from src.bot.keyboards.trading_keyboards import get_main_menu_keyboard
 from src.bot.middleware.user_middleware import UserMiddleware
-from src.bot.constants import SETTINGS_CATEGORIES
 from src.utils.logging import get_logger
 
 logger = get_logger(__name__)
 user_middleware = UserMiddleware()
 
+
 def get_settings_keyboard():
     keyboard = [
-        [InlineKeyboardButton("🔔 Notifications", callback_data="settings_notifications"),
-         InlineKeyboardButton("🎯 Risk Management", callback_data="settings_risk")],
-        [InlineKeyboardButton("💼 Trading Preferences", callback_data="settings_trading"),
-         InlineKeyboardButton("🔒 Security", callback_data="settings_security")],
-        [InlineKeyboardButton("📊 API Keys", callback_data="settings_api"),
-         InlineKeyboardButton("ℹ️ About", callback_data="settings_about")],
-        [InlineKeyboardButton("🔙 Back", callback_data="main_menu")]
+        [
+            InlineKeyboardButton(
+                "🔔 Notifications", callback_data="settings_notifications"
+            ),
+            InlineKeyboardButton("🎯 Risk Management", callback_data="settings_risk"),
+        ],
+        [
+            InlineKeyboardButton(
+                "💼 Trading Preferences", callback_data="settings_trading"
+            ),
+            InlineKeyboardButton("🔒 Security", callback_data="settings_security"),
+        ],
+        [
+            InlineKeyboardButton("📊 API Keys", callback_data="settings_api"),
+            InlineKeyboardButton("ℹ️ About", callback_data="settings_about"),
+        ],
+        [InlineKeyboardButton("🔙 Back", callback_data="main_menu")],
     ]
     return InlineKeyboardMarkup(keyboard)
+
 
 @user_middleware.require_user
 async def settings_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Handle settings command/callback"""
-    db_user = context.user_data['db_user']
-        
+    context.user_data["db_user"]
+
     settings_text = """
 ⚙️ **Bot Settings**
 
@@ -35,47 +43,45 @@ Configure your trading preferences and bot behavior.
 
 Choose a category to modify:
     """
-    
+
     if update.callback_query:
         await update.callback_query.edit_message_text(
-            settings_text,
-            parse_mode='Markdown',
-            reply_markup=get_settings_keyboard()
+            settings_text, parse_mode="Markdown", reply_markup=get_settings_keyboard()
         )
     else:
         await update.message.reply_text(
-            settings_text,
-            parse_mode='Markdown',
-            reply_markup=get_settings_keyboard()
+            settings_text, parse_mode="Markdown", reply_markup=get_settings_keyboard()
         )
 
-async def settings_notifications_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+
+async def settings_notifications_handler(
+    update: Update, context: ContextTypes.DEFAULT_TYPE
+) -> None:
     """Handle notifications settings"""
     query = update.callback_query
     await query.answer()
-    
+
     notifications_text = """
 🔔 **Notification Settings**
 
 • ✅ Position Updates
-• ✅ Price Alerts  
+• ✅ Price Alerts
 • ✅ Liquidation Warnings
 • ✅ Trade Confirmations
 
 Notifications are currently enabled.
     """
-    
+
     await query.edit_message_text(
-        notifications_text,
-        parse_mode='Markdown',
-        reply_markup=get_settings_keyboard()
+        notifications_text, parse_mode="Markdown", reply_markup=get_settings_keyboard()
     )
+
 
 async def settings_risk_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Handle risk management settings"""
     query = update.callback_query
     await query.answer()
-    
+
     risk_text = """
 🎯 **Risk Management**
 
@@ -86,18 +92,17 @@ async def settings_risk_handler(update: Update, context: ContextTypes.DEFAULT_TY
 
 Configure your risk parameters to protect your capital.
     """
-    
+
     await query.edit_message_text(
-        risk_text,
-        parse_mode='Markdown',
-        reply_markup=get_settings_keyboard()
+        risk_text, parse_mode="Markdown", reply_markup=get_settings_keyboard()
     )
+
 
 async def settings_trading_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Handle trading preferences"""
     query = update.callback_query
     await query.answer()
-    
+
     trading_text = """
 💼 **Trading Preferences**
 
@@ -108,18 +113,17 @@ async def settings_trading_handler(update: Update, context: ContextTypes.DEFAULT
 
 Customize your default trading parameters.
     """
-    
+
     await query.edit_message_text(
-        trading_text,
-        parse_mode='Markdown',
-        reply_markup=get_settings_keyboard()
+        trading_text, parse_mode="Markdown", reply_markup=get_settings_keyboard()
     )
+
 
 async def settings_security_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Handle security settings"""
     query = update.callback_query
     await query.answer()
-    
+
     security_text = """
 🔒 **Security Settings**
 
@@ -130,18 +134,17 @@ async def settings_security_handler(update: Update, context: ContextTypes.DEFAUL
 
 Your account is secure with industry-standard encryption.
     """
-    
+
     await query.edit_message_text(
-        security_text,
-        parse_mode='Markdown',
-        reply_markup=get_settings_keyboard()
+        security_text, parse_mode="Markdown", reply_markup=get_settings_keyboard()
     )
+
 
 async def settings_about_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Handle about information"""
     query = update.callback_query
     await query.answer()
-    
+
     about_text = """
 ℹ️ **About Vanta Bot**
 
@@ -159,10 +162,7 @@ async def settings_about_handler(update: Update, context: ContextTypes.DEFAULT_T
 
 Built with ❤️ for decentralized trading.
     """
-    
-    await query.edit_message_text(
-        about_text,
-        parse_mode='Markdown',
-        reply_markup=get_settings_keyboard()
-    )
 
+    await query.edit_message_text(
+        about_text, parse_mode="Markdown", reply_markup=get_settings_keyboard()
+    )

@@ -2,7 +2,7 @@
 
 from datetime import datetime
 from decimal import Decimal
-from typing import Any, Dict, List, Optional
+from typing import Any, Optional
 
 from src.blockchain.wallet_manager import wallet_manager
 from src.database.models import Position
@@ -17,7 +17,9 @@ logger = get_logger(__name__)
 class TradingService(BaseService):
     """Service for trading operations backed by async DB access."""
 
-    async def create_position(self, user_id: int, position_data: Dict[str, Any]) -> Position:
+    async def create_position(
+        self, user_id: int, position_data: dict[str, Any]
+    ) -> Position:
         """Create a new trading position after validating inputs and balance."""
         self.log_operation("create_position", user_id, **position_data)
 
@@ -58,7 +60,9 @@ class TradingService(BaseService):
             raise ValueError("Failed to update position status")
         return updated
 
-    async def get_user_positions(self, user_id: int, status: Optional[str] = None) -> List[Position]:
+    async def get_user_positions(
+        self, user_id: int, status: Optional[str] = None
+    ) -> list[Position]:
         """Get user positions with optional status filter."""
         self.log_operation("get_user_positions", user_id, status=status)
         return await db.get_user_positions(user_id, status=status)
@@ -121,7 +125,7 @@ class TradingService(BaseService):
             raise ValueError("Failed to close position")
         return updated
 
-    def validate_input(self, data: Dict[str, Any]) -> bool:
+    def validate_input(self, data: dict[str, Any]) -> bool:
         """Validate trading input data."""
         try:
             validate_position_data(data)

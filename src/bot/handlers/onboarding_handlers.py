@@ -1,6 +1,8 @@
 from __future__ import annotations
+
 from telegram import Update
 from telegram.ext import CommandHandler, ContextTypes
+
 from src.services.users.user_prefs import prefs_store
 
 WELCOME = (
@@ -27,13 +29,18 @@ HELP = (
     "• /diag — Diagnostics\n"
 )
 
+
 async def cmd_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     _ = prefs_store().get(update.effective_user.id)  # creates defaults lazily
     await update.effective_chat.send_message(WELCOME, parse_mode="Markdown")
-    await update.effective_chat.send_message("Try */markets* to begin.", parse_mode="Markdown")
+    await update.effective_chat.send_message(
+        "Try */markets* to begin.", parse_mode="Markdown"
+    )
+
 
 async def cmd_help(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.effective_chat.send_message(HELP, parse_mode="Markdown")
+
 
 def register(app):
     app.add_handler(CommandHandler("start", cmd_start))

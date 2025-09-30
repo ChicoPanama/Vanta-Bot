@@ -2,19 +2,23 @@
 Copy Trading Executor
 Provides auto-copy functionality for followed traders
 """
-from __future__ import annotations
-import logging
-from typing import Dict, Any, Optional
-from decimal import Decimal
-from datetime import datetime, timezone, timedelta
 
-from src.services.trading.execution_service import get_execution_service
+from __future__ import annotations
+
+import logging
+from datetime import datetime, timedelta, timezone
+from decimal import Decimal
+from typing import Any
+
+from sqlalchemy import and_, case, func, select
+
 from src.config.settings import settings
-from src.database.operations import db
 from src.database import models
-from sqlalchemy import select, func, case, and_
+from src.database.operations import db
+from src.services.trading.execution_service import get_execution_service
 
 log = logging.getLogger(__name__)
+
 
 async def follow(
     user_id: int,
@@ -23,11 +27,11 @@ async def follow(
     side: str,
     leverage: float,
     collateral_usdc: float,
-    slippage_pct: Optional[float] = None
-) -> Dict[str, Any]:
+    slippage_pct: float | None = None,
+) -> dict[str, Any]:
     """
     Execute a copy trade based on a followed trader's signal
-    
+
     Args:
         user_id: Telegram user ID
         trader_key: Trader identifier (wallet address or ID)
@@ -36,18 +40,21 @@ async def follow(
         leverage: Leverage multiplier
         collateral_usdc: Collateral amount in USDC
         slippage_pct: Optional slippage override
-        
+
     Returns:
         Dict with execution result
     """
     try:
-        log.info(f"Copy executing trade for user {user_id}: {pair} {side} {leverage}x ${collateral_usdc}")
-        
+        log.info(
+            f"Copy executing trade for user {user_id}: {pair} {side} {leverage}x ${collateral_usdc}"
+        )
+
         # Get execution service
         svc = get_execution_service(settings)
-        
+
         # Create a draft for the copy trade
         from src.services.trading.trade_drafts import TradeDraft
+
         draft = TradeDraft(
             user_id=user_id,
             pair=pair,
@@ -55,13 +62,15 @@ async def follow(
             collateral_usdc=Decimal(str(collateral_usdc)),
             leverage=Decimal(str(leverage)),
         )
-        
+
         # Execute the trade
         ok, msg, result = await svc.execute_open(
             draft=draft,
-            slippage_pct=Decimal(str(slippage_pct)) if slippage_pct is not None else None
+            slippage_pct=Decimal(str(slippage_pct))
+            if slippage_pct is not None
+            else None,
         )
-        
+
         return {
             "success": ok,
             "message": msg,
@@ -70,18 +79,21 @@ async def follow(
             "pair": pair,
             "side": side,
             "leverage": leverage,
-            "collateral_usdc": collateral_usdc
+            "collateral_usdc": collateral_usdc,
         }
-        
+
     except Exception as e:
-        log.exception(f"Copy execution failed for user {user_id}, trader {trader_key}: {e}")
+        log.exception(
+            f"Copy execution failed for user {user_id}, trader {trader_key}: {e}"
+        )
         return {
             "success": False,
             "message": f"Copy execution failed: {str(e)}",
             "result": None,
             "trader_key": trader_key,
-            "error": str(e)
+            "error": str(e),
         }
+
 
 def _ts_to_iso(value):
     if value in (None, 0):
@@ -95,14 +107,14 @@ def _ts_to_iso(value):
         return None
 
 
-async def status(user_id: int, trader_key: str) -> Dict[str, Any]:
+async def status(user_id: int, trader_key: str) -> dict[str, Any]:
     """
     Get copy trading status for a user-trader pair
-    
+
     Args:
         user_id: Telegram user ID
         trader_key: Trader identifier
-        
+
     Returns:
         Dict with status information
     """
@@ -120,33 +132,67 @@ async def status(user_id: int, trader_key: str) -> Dict[str, Any]:
             recent_filter = models.CopyPosition.opened_at >= cutoff_ts
             recent_closed_filter = and_(closed_filter, recent_filter)
 
-            aggregate_stmt = (
-                select(
-                    func.coalesce(func.sum(case((closed_filter, models.CopyPosition.pnl), else_=0)), 0).label("total_pnl"),
-                    func.coalesce(func.sum(case((closed_filter, volume_expr), else_=0)), 0).label("closed_volume"),
-                    func.coalesce(func.sum(case((open_filter, volume_expr), else_=0)), 0).label("open_volume"),
-                    func.coalesce(func.sum(case((closed_filter, 1), else_=0)), 0).label("closed_count"),
-                    func.coalesce(
-                        func.sum(
-                            case((and_(closed_filter, models.CopyPosition.pnl > 0), 1), else_=0)
-                        ),
-                        0,
-                    ).label("wins"),
-                    func.coalesce(func.sum(case((recent_closed_filter, models.CopyPosition.pnl), else_=0)), 0).label("pnl_30d"),
-                    func.coalesce(
-                        func.sum(
-                            case((and_(recent_closed_filter, models.CopyPosition.pnl > 0), 1), else_=0)
-                        ),
-                        0,
-                    ).label("wins_30d"),
-                    func.coalesce(func.sum(case((recent_closed_filter, 1), else_=0)), 0).label("closed_30d"),
-                    func.coalesce(func.sum(case((and_(recent_filter, open_filter), volume_expr), else_=0)), 0).label("open_volume_30d"),
-                    func.coalesce(func.sum(case((and_(recent_filter, closed_filter), volume_expr), else_=0)), 0).label("closed_volume_30d"),
-                    func.coalesce(func.sum(case((open_filter, 1), else_=0)), 0).label("open_count"),
-                    func.max(models.CopyPosition.opened_at).label("last_opened"),
-                    func.max(models.CopyPosition.closed_at).label("last_closed"),
-                ).where(*filters)
-            )
+            aggregate_stmt = select(
+                func.coalesce(
+                    func.sum(case((closed_filter, models.CopyPosition.pnl), else_=0)), 0
+                ).label("total_pnl"),
+                func.coalesce(
+                    func.sum(case((closed_filter, volume_expr), else_=0)), 0
+                ).label("closed_volume"),
+                func.coalesce(
+                    func.sum(case((open_filter, volume_expr), else_=0)), 0
+                ).label("open_volume"),
+                func.coalesce(func.sum(case((closed_filter, 1), else_=0)), 0).label(
+                    "closed_count"
+                ),
+                func.coalesce(
+                    func.sum(
+                        case(
+                            (and_(closed_filter, models.CopyPosition.pnl > 0), 1),
+                            else_=0,
+                        )
+                    ),
+                    0,
+                ).label("wins"),
+                func.coalesce(
+                    func.sum(
+                        case((recent_closed_filter, models.CopyPosition.pnl), else_=0)
+                    ),
+                    0,
+                ).label("pnl_30d"),
+                func.coalesce(
+                    func.sum(
+                        case(
+                            (
+                                and_(recent_closed_filter, models.CopyPosition.pnl > 0),
+                                1,
+                            ),
+                            else_=0,
+                        )
+                    ),
+                    0,
+                ).label("wins_30d"),
+                func.coalesce(
+                    func.sum(case((recent_closed_filter, 1), else_=0)), 0
+                ).label("closed_30d"),
+                func.coalesce(
+                    func.sum(
+                        case((and_(recent_filter, open_filter), volume_expr), else_=0)
+                    ),
+                    0,
+                ).label("open_volume_30d"),
+                func.coalesce(
+                    func.sum(
+                        case((and_(recent_filter, closed_filter), volume_expr), else_=0)
+                    ),
+                    0,
+                ).label("closed_volume_30d"),
+                func.coalesce(func.sum(case((open_filter, 1), else_=0)), 0).label(
+                    "open_count"
+                ),
+                func.max(models.CopyPosition.opened_at).label("last_opened"),
+                func.max(models.CopyPosition.closed_at).label("last_closed"),
+            ).where(*filters)
 
             return (await session.execute(aggregate_stmt)).one()
 
@@ -191,8 +237,7 @@ async def status(user_id: int, trader_key: str) -> Dict[str, Any]:
             "closed_copies_30d": closed_30d,
         }
     except Exception as e:
-        log.exception(f"Status check failed for user {user_id}, trader {trader_key}: {e}")
-        return {
-            "ok": False,
-            "error": str(e)
-        }
+        log.exception(
+            f"Status check failed for user {user_id}, trader {trader_key}: {e}"
+        )
+        return {"ok": False, "error": str(e)}

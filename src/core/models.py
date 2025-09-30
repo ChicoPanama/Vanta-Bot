@@ -5,19 +5,21 @@ This module defines the core data structures used throughout the application,
 ensuring type safety and validation at the boundaries.
 """
 
-from typing import TypedDict, NamedTuple, Optional
 from decimal import Decimal
 from enum import Enum
+from typing import NamedTuple, Optional, TypedDict
 
 
 class OrderType(Enum):
     """Order types supported by the protocol."""
+
     MARKET = 0
     LIMIT = 1
 
 
 class PositionDirection(Enum):
     """Position direction."""
+
     LONG = True
     SHORT = False
 
@@ -25,22 +27,24 @@ class PositionDirection(Enum):
 class TradeInput(TypedDict):
     """
     Input parameters for opening a trade.
-    
+
     All values are in contract units (scaled).
     """
+
     pairIndex: int
     buy: bool
-    leverage: int          # 1e10 scale
-    initialPosToken: int   # USDC 6dp
+    leverage: int  # 1e10 scale
+    initialPosToken: int  # USDC 6dp
     positionSizeUSDC: int  # USDC 6dp
-    openPrice: int         # 0 for market orders
-    tp: int               # Take profit price (0 = no TP)
-    sl: int               # Stop loss price (0 = no SL)
-    timestamp: int        # Timestamp (0 = current)
+    openPrice: int  # 0 for market orders
+    tp: int  # Take profit price (0 = no TP)
+    sl: int  # Stop loss price (0 = no SL)
+    timestamp: int  # Timestamp (0 = current)
 
 
 class TradeLimits(TypedDict):
     """Contract limits for trading parameters."""
+
     minPositionSize: int
     maxPositionSize: int
     maxLeverage: int
@@ -50,6 +54,7 @@ class TradeLimits(TypedDict):
 
 class PairInfo(TypedDict):
     """Information about a trading pair."""
+
     pairIndex: int
     baseAsset: str
     quoteAsset: str
@@ -61,6 +66,7 @@ class PairInfo(TypedDict):
 
 class HumanTradeParams(NamedTuple):
     """Human-readable trade parameters."""
+
     collateral_usdc: Decimal
     leverage_x: Decimal
     slippage_pct: Decimal
@@ -71,6 +77,7 @@ class HumanTradeParams(NamedTuple):
 
 class TradeResult(NamedTuple):
     """Result of a trade execution."""
+
     success: bool
     transaction_hash: Optional[str]
     error_message: Optional[str]
@@ -80,6 +87,7 @@ class TradeResult(NamedTuple):
 
 class ContractStatus(NamedTuple):
     """Current status of the trading contract."""
+
     is_paused: bool
     operator: str
     max_slippage: int
@@ -89,6 +97,7 @@ class ContractStatus(NamedTuple):
 
 class WalletInfo(NamedTuple):
     """Wallet information for trading."""
+
     address: str
     eth_balance: Decimal
     usdc_balance: Decimal
@@ -97,6 +106,7 @@ class WalletInfo(NamedTuple):
 
 class PriceInfo(NamedTuple):
     """Price information for a trading pair."""
+
     pair_index: int
     price: Decimal
     timestamp: float
@@ -105,6 +115,7 @@ class PriceInfo(NamedTuple):
 
 class RiskLimits(NamedTuple):
     """Risk management limits."""
+
     max_position_size_usd: Decimal
     max_account_risk_pct: Decimal
     liquidation_buffer_pct: Decimal

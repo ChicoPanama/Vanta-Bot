@@ -1,5 +1,5 @@
 from datetime import datetime, timedelta
-from typing import Any, Dict
+from typing import Any
 
 from src.database.operations import db
 from src.services.base_service import BaseService
@@ -13,7 +13,7 @@ class AnalyticsService(BaseService):
     """Enhanced analytics service with async database access."""
 
     @cached(ttl=300, key_prefix="analytics")
-    async def get_user_stats(self, user_id: int) -> Dict[str, Any]:
+    async def get_user_stats(self, user_id: int) -> dict[str, Any]:
         """Get comprehensive user trading statistics."""
         self.log_operation("get_user_stats", user_id)
 
@@ -28,8 +28,14 @@ class AnalyticsService(BaseService):
         avg_win_values = [pos.pnl for pos in closed_positions if (pos.pnl or 0) > 0]
         avg_loss_values = [pos.pnl for pos in closed_positions if (pos.pnl or 0) < 0]
 
-        avg_win = float(sum(avg_win_values) / len(avg_win_values)) if avg_win_values else 0.0
-        avg_loss = float(sum(avg_loss_values) / len(avg_loss_values)) if avg_loss_values else 0.0
+        avg_win = (
+            float(sum(avg_win_values) / len(avg_win_values)) if avg_win_values else 0.0
+        )
+        avg_loss = (
+            float(sum(avg_loss_values) / len(avg_loss_values))
+            if avg_loss_values
+            else 0.0
+        )
 
         win_rate = (winning_trades / total_trades * 100) if total_trades else 0.0
         profit_factor = abs(avg_win / avg_loss) if avg_loss else 0.0
@@ -46,13 +52,15 @@ class AnalyticsService(BaseService):
         }
 
     @cached(ttl=180, key_prefix="portfolio")
-    async def get_portfolio_summary(self, user_id: int) -> Dict[str, Any]:
+    async def get_portfolio_summary(self, user_id: int) -> dict[str, Any]:
         """Get portfolio summary with current positions."""
         self.log_operation("get_portfolio_summary", user_id)
 
         open_positions = await db.get_user_positions(user_id, status="OPEN")
         total_unrealized_pnl = float(sum(pos.pnl or 0 for pos in open_positions))
-        total_exposure = float(sum((pos.size or 0) * (pos.leverage or 0) for pos in open_positions))
+        total_exposure = float(
+            sum((pos.size or 0) * (pos.leverage or 0) for pos in open_positions)
+        )
 
         return {
             "open_positions": len(open_positions),
@@ -72,7 +80,9 @@ class AnalyticsService(BaseService):
             ],
         }
 
-    async def get_performance_metrics(self, user_id: int, days: int = 30) -> Dict[str, Any]:
+    async def get_performance_metrics(
+        self, user_id: int, days: int = 30
+    ) -> dict[str, Any]:
         """Get performance metrics for a specific period."""
         self.log_operation("get_performance_metrics", user_id, days=days)
 
@@ -81,7 +91,8 @@ class AnalyticsService(BaseService):
         closed_recent = [
             pos
             for pos in positions
-            if pos.status == "CLOSED" and (pos.closed_at or pos.opened_at or datetime.utcnow()) >= cutoff
+            if pos.status == "CLOSED"
+            and (pos.closed_at or pos.opened_at or datetime.utcnow()) >= cutoff
         ]
 
         if not closed_recent:
@@ -121,7 +132,7 @@ class AnalyticsService(BaseService):
             "worst_trade": min(pnl_values),
         }
 
-    def validate_input(self, data: Dict[str, Any]) -> bool:
+    def validate_input(self, data: dict[str, Any]) -> bool:
         """Validate input data."""
         return isinstance(data, dict) and isinstance(data.get("user_id"), int)
 

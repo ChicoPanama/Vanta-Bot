@@ -7,7 +7,7 @@ import logging
 import os
 import time
 import uuid
-from typing import Any, Dict, Optional
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
@@ -18,7 +18,9 @@ try:  # pragma: no cover - best-effort optional dependency
     import sentry_sdk
 
     if SENTRY_DSN:
-        sentry_sdk.init(dsn=SENTRY_DSN, traces_sample_rate=float(os.getenv("SENTRY_TRACES", "0.0")))
+        sentry_sdk.init(
+            dsn=SENTRY_DSN, traces_sample_rate=float(os.getenv("SENTRY_TRACES", "0.0"))
+        )
         SENTRY_ENABLED = True
     else:
         SENTRY_ENABLED = False
@@ -31,7 +33,7 @@ class JsonFormatter(logging.Formatter):
     """Emit logs as structured JSON."""
 
     def format(self, record: logging.LogRecord) -> str:  # noqa: D401 - overriding
-        payload: Dict[str, Any] = {
+        payload: dict[str, Any] = {
             "lvl": record.levelname,
             "msg": record.getMessage(),
             "ts": int(time.time() * 1000),
@@ -89,9 +91,9 @@ def rid() -> str:
     return uuid.uuid4().hex[:12]
 
 
-def log_exc(exc: Exception, context: Optional[Dict[str, Any]] = None) -> None:
+def log_exc(exc: Exception, context: dict[str, Any] | None = None) -> None:
     """Log *exc* and forward to Sentry when available."""
-    data: Dict[str, Any]
+    data: dict[str, Any]
     if context is None:
         data = {}
     elif isinstance(context, dict):

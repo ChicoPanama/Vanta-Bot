@@ -1,195 +1,94 @@
-# Avantis Trading Bot - Development Makefile
+.PHONY: help install dev test lint format typecheck clean docker-build docker-run
 
-.PHONY: help install dev-install test test-unit test-integration test-e2e lint format type-check pre-commit clean build docs
+help: ## Show this help message
+	@echo "Vanta Bot Development Commands"
+	@echo "=============================="
+	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | sort | awk 'BEGIN {FS = ":.*?## "}; {printf "\033[36m%-20s\033[0m %s\n", $$1, $$2}'
 
-# Default target
-help:
-	@echo "Avantis Trading Bot - Available Commands:"
-	@echo ""
-	@echo "Installation:"
-	@echo "  install          Install production dependencies"
-	@echo "  dev-install      Install development dependencies"
-	@echo ""
-	@echo "Testing:"
-	@echo "  test             Run all tests"
-	@echo "  test-unit        Run unit tests only (fast)"
-	@echo "  test-integration Run integration tests (requires RPC)"
-	@echo "  test-e2e         Run end-to-end tests (requires CONFIRM_SEND=YES)"
-	@echo "  test-coverage    Run tests with coverage report"
-	@echo ""
-	@echo "Code Quality:"
-	@echo "  lint             Run linting checks"
-	@echo "  format           Format code with black and isort"
-	@echo "  type-check       Run type checking with mypy"
-	@echo "  pre-commit       Run all pre-commit hooks"
-	@echo ""
-	@echo "Development:"
-	@echo "  clean            Clean up build artifacts"
-	@echo "  build            Build package"
-	@echo "  docs             Generate documentation"
-	@echo ""
-	@echo "CLI Tools:"
-	@echo "  preflight        Run preflight validation"
-	@echo "  monitor          Monitor contract unpause events"
-	@echo ""
-	@echo "Examples:"
-	@echo "  make dev-install && make test-unit"
-	@echo "  make pre-commit"
-	@echo "  make preflight"
-
-# Installation
-install:
-	pip install -e .
-
-dev-install:
-	pip install -e ".[dev]"
+install: ## Install dependencies
+	pip install -r requirements.txt
+	pip install -e .[dev]
 	pre-commit install
 
-# Testing
-test:
-	pytest tests/ -v
+dev-install: ## Install dev dependencies (venv assumed active)
+	pip install -U pip
+	pip install -e .[dev]
 
-test-unit:
-	pytest tests/unit -v
+dev: ## Start development environment
+	docker-compose up -d postgres redis
+	@echo "Waiting for services to start..."
+	sleep 5
+	python -m vantabot
 
-test-integration:
-	pytest -m integration -v
+test: ## Run tests
+	pytest -q
 
-test-e2e:
-	@if [ "$(CONFIRM_SEND)" != "YES" ]; then \
-		echo "E2E tests require CONFIRM_SEND=YES"; \
-		echo "Run: CONFIRM_SEND=YES make test-e2e"; \
-		exit 1; \
-	fi
-	pytest -m e2e -v
+test-unit: ## Run unit tests
+	pytest -q tests/unit
 
-test-coverage:
-	pytest tests/unit --cov=src --cov-report=html --cov-report=term
+test-integration: ## Run integration tests
+	pytest -q tests/integration
 
-# Code Quality
-lint:
-	ruff check . --fix
-	black --check .
-	isort --check-only .
+test-all: ## Run all tests including integration
+	pytest -q
 
-format:
-	black .
-	isort .
+lint: ## Run linting
+	ruff check .
+	ruff format --check .
 
-type-check:
-	mypy src
+format: ## Format code
+	ruff format .
+	ruff check --fix .
 
-pre-commit:
-	pre-commit run --all-files
+typecheck: ## Run type checking
+	mypy src/
 
-# Development
-clean:
-	rm -rf build/
-	rm -rf dist/
-	rm -rf *.egg-info/
-	rm -rf .coverage
-	rm -rf htmlcov/
-	rm -rf .pytest_cache/
-	find . -type d -name __pycache__ -delete
+type-check: ## Alias for type checking
+	mypy src/
+
+clean: ## Clean up temporary files
 	find . -type f -name "*.pyc" -delete
+	find . -type d -name "__pycache__" -delete
+	find . -type d -name "*.egg-info" -delete
+	rm -rf .pytest_cache
+	rm -rf .mypy_cache
+	rm -rf .ruff_cache
+	rm -rf htmlcov
+	rm -rf .coverage
 
-build:
-	python -m build
+docker-build: ## Build Docker image
+	docker build -t vantabot:latest .
 
-docs:
-	@echo "Documentation generation not yet implemented"
+docker-run: ## Run Docker container
+	docker run --rm -it --env-file .env vantabot:latest
 
-# CLI Tools
-preflight:
-	python -m src.cli.preflight
+docker-prod: ## Build and run production Docker image
+	docker build -f Dockerfile.prod -t vantabot:prod .
+	docker-compose -f docker-compose.prod.yml up -d
 
-monitor:
-	python -m src.cli.monitor_unpaused
+migrate: ## Run database migrations
+	alembic upgrade head
 
-# Development helpers
-setup-dev: dev-install
-	@echo "Setting up development environment..."
-	@if [ ! -f env/.env ]; then \
-		echo "Copying environment template..."; \
-		cp env/.env.example env/.env; \
-		echo "Please edit env/.env with your configuration"; \
-	fi
-	@echo "Development environment ready!"
+migrate-create: ## Create new migration (usage: make migrate-create MESSAGE="description")
+	alembic revision --autogenerate -m "$(MESSAGE)"
 
-check-env:
-	@echo "Checking environment configuration..."
-	@if [ ! -f env/.env ]; then \
-		echo "❌ env/.env not found. Run 'make setup-dev' first"; \
-		exit 1; \
-	fi
-	@echo "✅ Environment file found"
+logs: ## View application logs
+	docker-compose logs -f vantabot
 
-# Quick development workflow
-quick-test: check-env
-	@echo "Running quick development tests..."
-	make test-unit
-	make lint
+shell: ## Open Python shell with app context
+	python -c "from src.config.settings import settings; from src.database.session import get_session; print('Vanta Bot shell ready')"
 
-# Production readiness check
-production-check:
-	@echo "Running production readiness checks..."
-	make test-unit
-	make lint
-	make type-check
-	@echo "✅ Production readiness check passed"
+check: lint typecheck test ## Run all checks
 
-# Security checks
-security-check:
-	@echo "Running security checks..."
-	@if command -v safety >/dev/null 2>&1; then \
-		safety check; \
-	else \
-		echo "⚠️  safety not installed. Install with: pip install safety"; \
-	fi
-	@if command -v bandit >/dev/null 2>&1; then \
-		bandit -r src; \
-	else \
-		echo "⚠️  bandit not installed. Install with: pip install bandit"; \
-	fi
+ci: ## Run CI pipeline locally
+	ruff check .
+	mypy src/
+	pytest -q tests/unit
+	@echo "✅ All CI checks passed"
 
-# Docker helpers (if needed)
-docker-build:
-	docker build -t avantis-trading-bot .
+setup: install migrate ## Complete setup for development
+	@echo "✅ Development environment ready"
+	@echo "Run 'make dev' to start the bot"
 
-docker-run:
-	docker run --env-file env/.env avantis-trading-bot
-
-# Git helpers
-git-setup:
-	@echo "Setting up git hooks..."
-	pre-commit install
-	@echo "✅ Git hooks installed"
-
-# Release helpers
-release-check:
-	@echo "Running release checks..."
-	make production-check
-	make security-check
-	@echo "✅ Release checks passed"
-
-# Help for specific commands
-help-test:
-	@echo "Testing Commands:"
-	@echo "  make test-unit        - Fast unit tests (no external dependencies)"
-	@echo "  make test-integration - Tests requiring RPC access"
-	@echo "  make test-e2e         - Full end-to-end tests (requires CONFIRM_SEND=YES)"
-	@echo ""
-	@echo "Test Examples:"
-	@echo "  make test-unit"
-	@echo "  BASE_RPC_URL=https://mainnet.base.org make test-integration"
-	@echo "  CONFIRM_SEND=YES make test-e2e"
-
-help-cli:
-	@echo "CLI Commands:"
-	@echo "  make preflight        - Run preflight validation"
-	@echo "  make monitor          - Monitor contract unpause events"
-	@echo ""
-	@echo "CLI Examples:"
-	@echo "  make preflight"
-	@echo "  python -m src.cli.open_trade --collat 10 --lev 2 --slip 1 --pair 0 --long"
-	@echo "  python -m src.cli.preflight --collat 100 --lev 5 --slip 0.5 --pair 1 --short"
+rotate-deks: ## Rotate DEK encryption keys (Phase 1)
+	python scripts/rewrap_deks.py

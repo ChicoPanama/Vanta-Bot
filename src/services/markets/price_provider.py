@@ -1,15 +1,17 @@
 from __future__ import annotations
+
 from decimal import Decimal
-from typing import Optional, Dict, Any
+
 
 class PriceProvider:
     """
     Minimal provider. Replace internals with Avantis Trader SDK price feed callbacks
     (PYTH) or your market data service when ready.
     """
+
     def __init__(self):
         # simple in-memory last price store; swap with live feed later
-        self._last: Dict[str, Decimal] = {}
+        self._last: dict[str, Decimal] = {}
 
     async def set_price(self, pair: str, price: Decimal) -> None:
         self._last[pair] = price
