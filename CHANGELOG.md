@@ -209,3 +209,51 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Real-time balance and position views
 - Error handling with no stack traces
 
+
+## Phase 6: Signals & Automations — 2025-09-30
+
+### Added
+- **Database models** (Phase 6):
+  - Signal: Trade signal records with idempotency
+  - Execution: Signal execution tracking (QUEUED→APPROVED→SENT→MINED)
+- **Webhook API** (FastAPI):
+  - POST /signals: HMAC-signed signal ingestion
+  - GET /health: Health check endpoint
+  - SignalIn schema with validation
+- **Signal rules**:
+  - evaluate_open/close: Risk gating (sides, symbols, leverage)
+  - Allowed markets: BTC-USD, ETH-USD, SOL-USD
+  - Max leverage: 50x
+  - Extensible for per-user policies
+- **Signal worker**:
+  - Redis queue consumer (LPOP from signals:q:v1)
+  - Rules evaluation before execution
+  - Calls AvantisService → TxOrchestrator
+  - Execution audit trail
+- **Operator commands**:
+  - /qpeek: View signal queue
+  - /pause_auto, /resume_auto: Control automation
+- **Makefile targets**:
+  - make run-webhook: Start FastAPI webhook
+  - make run-worker: Start signal worker
+  - make queue-peek: Inspect queue
+
+### Integration
+- Signals → AvantisService (Phase 3)
+- Executions → TxOrchestrator (Phase 2)
+- Audit trail in database (Phase 4)
+
+### Tests
+- 7 new tests (100% passing)
+  - Signal rules: 7 tests (open/close validation)
+
+### Security
+- HMAC signature verification (X-Signature header)
+- Idempotency via intent_key (sig:source:id)
+- Master kill switches (SIGNALS_ENABLED, AUTOMATION_PAUSED)
+
+### Documentation
+- HMAC header format documented
+- Signal payload schema
+- CHANGELOG.md updated
+

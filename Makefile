@@ -126,3 +126,12 @@ bot-lint: ## Lint bot code (Phase 5)
 
 bot-test: ## Test bot code (Phase 5)
 	pytest -q tests/bot tests/unit/repositories/test_user_wallets_repo.py
+
+run-webhook: ## Run webhook API (Phase 6)
+	python -m src.api
+
+run-worker: ## Run signal worker (Phase 6)
+	python -m src.workers.signal_worker
+
+queue-peek: ## Peek at signal queue (Phase 6)
+	@python -c "import redis; from src.config.settings import settings; r=redis.from_url(settings.REDIS_URL); items=r.lrange(settings.SIGNALS_QUEUE,0,20); print(f'Queue length: {len(items)}'); [print(i.decode()) for i in items]"

@@ -362,3 +362,48 @@ class UserWallet(Base):
     id = Column(Integer, primary_key=True, autoincrement=True)
     tg_user_id = Column(BigInteger, nullable=False)
     address = Column(String(42), nullable=False)
+
+
+# ========== Phase 6: Signals & Automations ==========
+
+
+class Signal(Base):
+    """Trade signal record (Phase 6)."""
+
+    __tablename__ = "signals"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    source = Column(
+        String(64), index=True, nullable=False
+    )  # e.g., "webhook:tradingview"
+    signal_id = Column(String(128), index=True, nullable=False)  # provider's id
+    intent_key = Column(String(160), unique=True, nullable=False)  # for idempotency
+    tg_user_id = Column(Integer, index=True, nullable=False)
+    symbol = Column(String(32), index=True, nullable=False)
+    side = Column(String(8), nullable=False)  # LONG|SHORT|CLOSE
+    collateral_usdc = Column(Float, nullable=False, default=0.0)
+    leverage_x = Column(Integer, nullable=False, default=2)
+    reduce_usdc = Column(Float, nullable=False, default=0.0)
+    slippage_pct = Column(Float, nullable=False, default=0.5)
+    received_at = Column(DateTime, default=func.now(), nullable=False)
+    meta = Column(Text, default="{}", nullable=False)
+
+
+Index("ix_signal_source_sid", Signal.source, Signal.signal_id)
+
+
+class Execution(Base):
+    """Signal execution tracking (Phase 6)."""
+
+    __tablename__ = "executions"
+    __table_args__ = (Index("ix_exec_intent", "intent_key", unique=True),)
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    intent_key = Column(String(160), index=True, nullable=False)
+    tx_hash = Column(String(66), nullable=True)
+    status = Column(
+        String(24), default="QUEUED", nullable=False
+    )  # QUEUED|APPROVED|REJECTED|SENT|MINED|FAILED
+    reason = Column(String(256), nullable=True)  # rejection reason or error
+    created_at = Column(DateTime, default=func.now(), nullable=False)
+    updated_at = Column(DateTime, default=func.now(), nullable=False)
