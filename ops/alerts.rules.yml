@@ -1,0 +1,37 @@
+groups:
+- name: vanta
+  rules:
+  - alert: QueueBacklogHigh
+    expr: vanta_signals_queue_depth > 100
+    for: 5m
+    labels: { severity: page }
+    annotations:
+      summary: "Signals queue backlog > 100"
+      
+  - alert: ExecutionFailuresBurst
+    expr: increase(vanta_exec_processed_total{status="FAILED"}[5m]) > 5
+    for: 2m
+    labels: { severity: page }
+    annotations:
+      summary: "Execution failures >5 in 5m"
+      
+  - alert: RejectionSpike
+    expr: increase(vanta_signals_rejected_total[10m]) > 50
+    for: 5m
+    labels: { severity: warn }
+    annotations:
+      summary: "Signal rejections spiking"
+      
+  - alert: TPSLErrors
+    expr: increase(vanta_tpsl_errors_total[10m]) > 0
+    for: 5m
+    labels: { severity: warn }
+    annotations:
+      summary: "TP/SL executor reporting errors"
+      
+  - alert: WorkerSilent
+    expr: vanta_loop_heartbeat{component="worker"} == 0
+    for: 2m
+    labels: { severity: page }
+    annotations:
+      summary: "Worker loop heartbeat missing"

@@ -138,3 +138,9 @@ queue-peek: ## Peek at signal queue (Phase 6)
 
 run-tpsl: ## Run TP/SL executor (Phase 7)
 	python -m src.services.executors.tpsl_executor
+
+metrics-curl: ## Curl metrics endpoint (Phase 8)
+	curl -s http://127.0.0.1:8090/metrics | head -n 30
+
+logs-json: ## Show JSON logs (Phase 8)
+	@echo "Set COMPONENT env var per process (webhook, worker, tpsl, bot)"
