@@ -15,8 +15,9 @@ class TestCredentialsRepository:
     @pytest.fixture
     def db_session(self, monkeypatch):
         """Create in-memory SQLite session."""
-        import boto3
         import sys
+
+        import boto3
 
         # Setup mocked KMS
         kms = boto3.client("kms", region_name="us-east-1")
@@ -31,7 +32,12 @@ class TestCredentialsRepository:
         monkeypatch.setenv("DATABASE_URL", "sqlite:///:memory:")
 
         # Reload modules to pick up env vars
-        for mod in ["src.config.settings", "src.security.crypto", "src.database.types", "src.database.models"]:
+        for mod in [
+            "src.config.settings",
+            "src.security.crypto",
+            "src.database.types",
+            "src.database.models",
+        ]:
             if mod in sys.modules:
                 del sys.modules[mod]
 

@@ -10,8 +10,9 @@ class TestEncryptedTypes:
 
     def test_encrypted_bytes_round_trip(self, monkeypatch):
         """Test EncryptedBytes type encryption/decryption."""
-        import boto3
         import sys
+
+        import boto3
 
         # Setup mocked KMS
         kms = boto3.client("kms", region_name="us-east-1")
@@ -24,12 +25,12 @@ class TestEncryptedTypes:
         monkeypatch.setenv("TELEGRAM_BOT_TOKEN", "test")
         monkeypatch.setenv("BASE_RPC_URL", "https://test.rpc")
         monkeypatch.setenv("DATABASE_URL", "sqlite:///test.db")
-        
+
         # Reload modules
         for mod in ["src.config.settings", "src.security.crypto", "src.database.types"]:
             if mod in sys.modules:
                 del sys.modules[mod]
-        
+
         from src.database.types import EncryptedBytes
 
         encrypted_type = EncryptedBytes()
@@ -49,8 +50,9 @@ class TestEncryptedTypes:
 
     def test_encrypted_json_round_trip(self, monkeypatch):
         """Test EncryptedJSON type encryption/decryption."""
-        import boto3
         import sys
+
+        import boto3
 
         # Setup mocked KMS
         kms = boto3.client("kms", region_name="us-east-1")
@@ -63,12 +65,12 @@ class TestEncryptedTypes:
         monkeypatch.setenv("TELEGRAM_BOT_TOKEN", "test")
         monkeypatch.setenv("BASE_RPC_URL", "https://test.rpc")
         monkeypatch.setenv("DATABASE_URL", "sqlite:///test.db")
-        
+
         # Reload modules
         for mod in ["src.config.settings", "src.security.crypto", "src.database.types"]:
             if mod in sys.modules:
                 del sys.modules[mod]
-        
+
         from src.database.types import EncryptedJSON
 
         encrypted_type = EncryptedJSON()
@@ -87,8 +89,9 @@ class TestEncryptedTypes:
 
     def test_encrypted_string_round_trip(self, monkeypatch):
         """Test EncryptedString type encryption/decryption."""
-        import boto3
         import sys
+
+        import boto3
 
         # Setup mocked KMS
         kms = boto3.client("kms", region_name="us-east-1")
@@ -101,12 +104,12 @@ class TestEncryptedTypes:
         monkeypatch.setenv("TELEGRAM_BOT_TOKEN", "test")
         monkeypatch.setenv("BASE_RPC_URL", "https://test.rpc")
         monkeypatch.setenv("DATABASE_URL", "sqlite:///test.db")
-        
+
         # Reload modules
         for mod in ["src.config.settings", "src.security.crypto", "src.database.types"]:
             if mod in sys.modules:
                 del sys.modules[mod]
-        
+
         from src.database.types import EncryptedString
 
         encrypted_type = EncryptedString()

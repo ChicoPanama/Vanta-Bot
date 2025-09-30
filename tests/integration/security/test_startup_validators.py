@@ -22,7 +22,7 @@ class TestStartupValidators:
     def test_validate_kms_config_missing_key(self, monkeypatch):
         """Test KMS config validation fails without key ID."""
         import sys
-        
+
         monkeypatch.setenv("SIGNER_BACKEND", "kms")
         monkeypatch.delenv("KMS_KEY_ID", raising=False)
         monkeypatch.delenv("AWS_KMS_KEY_ID", raising=False)
@@ -43,7 +43,7 @@ class TestStartupValidators:
     def test_validate_local_config_warns(self, monkeypatch):
         """Test local config validation emits warning."""
         import sys
-        
+
         monkeypatch.setenv("SIGNER_BACKEND", "local")
         monkeypatch.setenv("PRIVATE_KEY", "0x" + "a" * 64)
         monkeypatch.setenv("TELEGRAM_BOT_TOKEN", "test")
@@ -63,7 +63,7 @@ class TestStartupValidators:
     def test_validate_encryption_config_invalid_dek_size(self, monkeypatch):
         """Test encryption validation fails with invalid DEK size."""
         import sys
-        
+
         monkeypatch.setenv("ENCRYPTION_DEK_BYTES", "15")  # Invalid size
         monkeypatch.setenv("TELEGRAM_BOT_TOKEN", "test")
         monkeypatch.setenv("BASE_RPC_URL", "https://test.rpc")
@@ -82,7 +82,7 @@ class TestStartupValidators:
     def test_run_all_validations(self, monkeypatch):
         """Test all validations run successfully."""
         import sys
-        
+
         monkeypatch.setenv("SIGNER_BACKEND", "kms")
         monkeypatch.setenv("KMS_KEY_ID", "test-key")
         monkeypatch.setenv("ENCRYPTION_DEK_BYTES", "32")

@@ -10,9 +10,10 @@ class TestEnvelopeEncryption:
 
     def test_round_trip_crypto(self, monkeypatch):
         """Test encrypt/decrypt round trip."""
-        import boto3
         import sys
-        
+
+        import boto3
+
         # Setup mocked KMS
         kms = boto3.client("kms", region_name="us-east-1")
         key = kms.create_key()["KeyMetadata"]["KeyId"]
@@ -24,13 +25,13 @@ class TestEnvelopeEncryption:
         monkeypatch.setenv("TELEGRAM_BOT_TOKEN", "test")
         monkeypatch.setenv("BASE_RPC_URL", "https://test.rpc")
         monkeypatch.setenv("DATABASE_URL", "sqlite:///test.db")
-        
+
         # Reload settings module to pick up env vars
         if "src.config.settings" in sys.modules:
             del sys.modules["src.config.settings"]
         if "src.security.crypto" in sys.modules:
             del sys.modules["src.security.crypto"]
-        
+
         from src.security.crypto import decrypt_blob, encrypt_blob
 
         # Test data
@@ -52,8 +53,9 @@ class TestEnvelopeEncryption:
 
     def test_rewrap_dek(self, monkeypatch):
         """Test DEK rewrapping for key rotation."""
-        import boto3
         import sys
+
+        import boto3
 
         # Setup mocked KMS
         kms = boto3.client("kms", region_name="us-east-1")
@@ -68,12 +70,12 @@ class TestEnvelopeEncryption:
         monkeypatch.setenv("TELEGRAM_BOT_TOKEN", "test")
         monkeypatch.setenv("BASE_RPC_URL", "https://test.rpc")
         monkeypatch.setenv("DATABASE_URL", "sqlite:///test.db")
-        
+
         # Reload modules
         for mod in ["src.config.settings", "src.security.crypto"]:
             if mod in sys.modules:
                 del sys.modules[mod]
-        
+
         from src.security.crypto import generate_dek, rewrap_encrypted_dek
 
         # Generate DEK with old key
@@ -81,12 +83,12 @@ class TestEnvelopeEncryption:
 
         # Switch to new key
         monkeypatch.setenv("KMS_KEY_ID", new_key)
-        
+
         # Reload settings/crypto again
         for mod in ["src.config.settings", "src.security.crypto"]:
             if mod in sys.modules:
                 del sys.modules[mod]
-        
+
         from src.security.crypto import rewrap_encrypted_dek as rewrap_func
 
         # Rewrap DEK
@@ -120,8 +122,9 @@ class TestEnvelopeEncryption:
 
     def test_encrypt_different_plaintexts_different_ciphertexts(self, monkeypatch):
         """Test that same plaintext produces different ciphertexts (random IV)."""
-        import boto3
         import sys
+
+        import boto3
 
         # Setup mocked KMS
         kms = boto3.client("kms", region_name="us-east-1")
@@ -134,12 +137,12 @@ class TestEnvelopeEncryption:
         monkeypatch.setenv("TELEGRAM_BOT_TOKEN", "test")
         monkeypatch.setenv("BASE_RPC_URL", "https://test.rpc")
         monkeypatch.setenv("DATABASE_URL", "sqlite:///test.db")
-        
+
         # Reload modules
         for mod in ["src.config.settings", "src.security.crypto"]:
             if mod in sys.modules:
                 del sys.modules[mod]
-        
+
         from src.security.crypto import encrypt_blob
 
         data = b"same data"
