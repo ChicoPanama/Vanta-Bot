@@ -144,3 +144,25 @@ metrics-curl: ## Curl metrics endpoint (Phase 8)
 
 logs-json: ## Show JSON logs (Phase 8)
 	@echo "Set COMPONENT env var per process (webhook, worker, tpsl, bot)"
+
+docker-build: ## Build all Docker images (Phase 9)
+	@TAG=$$(git rev-parse --short HEAD) && \
+	for svc in bot webhook worker tpsl indexer; do \
+		echo "Building $$svc..." && \
+		docker build -f docker/Dockerfile.$$svc -t vanta/$$svc:$$TAG -t vanta/$$svc:latest .; \
+	done
+
+docker-up: ## Start all services with docker-compose (Phase 9)
+	docker compose -f docker/compose.yml up -d
+
+docker-down: ## Stop all services (Phase 9)
+	docker compose -f docker/compose.yml down
+
+docker-logs: ## Tail docker logs (Phase 9)
+	docker compose -f docker/compose.yml logs -f --tail=100
+
+prod-migrate: ## Run migrations (Phase 9)
+	python ops/migrate.py
+
+prod-backup: ## Backup database (Phase 9)
+	bash ops/backup.sh

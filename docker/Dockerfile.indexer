@@ -1,0 +1,12 @@
+FROM python:3.11-slim
+ENV PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1 COMPONENT=indexer
+RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates && rm -rf /var/lib/apt/lists/*
+WORKDIR /app
+COPY pyproject.toml requirements.txt ./
+RUN pip install --no-cache-dir --upgrade pip && pip install --no-cache-dir -r requirements.txt
+COPY src ./src
+COPY migrations ./migrations
+RUN useradd -m -u 10001 appuser && chown -R appuser:appuser /app
+USER appuser
+ENV PYTHONPATH=/app
+ENTRYPOINT ["python","-m","src.services.indexers.avantis_indexer"]

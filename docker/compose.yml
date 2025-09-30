@@ -1,0 +1,130 @@
+version: "3.9"
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: vanta
+      POSTGRES_PASSWORD: vanta
+      POSTGRES_DB: vanta
+    volumes:
+      - pg_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U vanta -d vanta"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+    ports:
+      - "5432:5432"
+
+  redis:
+    image: redis:7-alpine
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 2s
+      retries: 10
+    ports:
+      - "6379:6379"
+
+  webhook:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.webhook
+    env_file:
+      - ../.env
+    environment:
+      DATABASE_URL: postgresql://vanta:vanta@postgres:5432/vanta
+      REDIS_URL: redis://redis:6379/0
+    ports:
+      - "8090:8090"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    read_only: true
+    tmpfs:
+      - /tmp
+    restart: unless-stopped
+
+  worker:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.worker
+    env_file:
+      - ../.env
+    environment:
+      DATABASE_URL: postgresql://vanta:vanta@postgres:5432/vanta
+      REDIS_URL: redis://redis:6379/0
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    read_only: true
+    tmpfs:
+      - /tmp
+    restart: unless-stopped
+
+  tpsl:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.tpsl
+    env_file:
+      - ../.env
+    environment:
+      DATABASE_URL: postgresql://vanta:vanta@postgres:5432/vanta
+      REDIS_URL: redis://redis:6379/0
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    read_only: true
+    tmpfs:
+      - /tmp
+    restart: unless-stopped
+
+  bot:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.bot
+    env_file:
+      - ../.env
+    environment:
+      DATABASE_URL: postgresql://vanta:vanta@postgres:5432/vanta
+      REDIS_URL: redis://redis:6379/0
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    read_only: true
+    tmpfs:
+      - /tmp
+    restart: unless-stopped
+
+  indexer:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.indexer
+    env_file:
+      - ../.env
+    environment:
+      DATABASE_URL: postgresql://vanta:vanta@postgres:5432/vanta
+      REDIS_URL: redis://redis:6379/0
+    depends_on:
+      postgres:
+        condition: service_healthy
+    read_only: true
+    tmpfs:
+      - /tmp
+    restart: unless-stopped
+
+volumes:
+  pg_data: {}
+  redis_data: {}
