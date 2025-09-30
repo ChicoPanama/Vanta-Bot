@@ -18,27 +18,27 @@ class MarketInfo:
 
 def default_market_catalog() -> dict[str, MarketInfo]:
     """Default market catalog with Base mainnet addresses.
-    
+
     WARNING: Replace placeholder addresses with verified Avantis addresses.
     These are loaded from config/addresses/base.mainnet.json
     """
     # Load from config file
     import json
     import os
-    
+
     config_path = os.path.join(
         os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(__file__)))),
         "config",
         "addresses",
-        "base.mainnet.json"
+        "base.mainnet.json",
     )
-    
+
     try:
-        with open(config_path, "r") as f:
+        with open(config_path) as f:
             config = json.load(f)
-        
+
         trading_address = config["contracts"]["trading"]["address"]
-        
+
         # Define supported markets
         # Note: In production, these should be loaded from on-chain registry
         # or verified configuration. Using placeholder market IDs for now.
@@ -97,4 +97,5 @@ def default_market_catalog() -> dict[str, MarketInfo]:
 
 
 import logging
+
 logger = logging.getLogger(__name__)

@@ -103,3 +103,7 @@ db = SessionLocal(); \
 orch = TxOrchestrator(w3, db); \
 print(f'Reconciled nonce: {orch.reconcile_nonce()}'); \
 db.close()"
+
+validate-markets: ## Validate market configuration (Phase 3)
+	@echo "🔍 Validating markets..."
+	@python -c "from web3 import Web3; from src.config.settings import settings; from src.startup.markets_validator import validate_markets_and_feeds; w3 = Web3(Web3.HTTPProvider(settings.BASE_RPC_URL)); validate_markets_and_feeds(w3); print('✅ Markets validated')"

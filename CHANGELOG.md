@@ -98,3 +98,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **2.1.0**: Production-ready release with full feature set
 - **2.0.0**: Initial release with core functionality
 - **1.x.x**: Development and testing phases (not released)
+## Phase 3: Avantis SDK Hardwiring — 2025-09-30
+
+### Added
+- **Market catalog** (`src/services/markets/market_catalog.py`): Canonical registry for BTC-USD, ETH-USD, SOL-USD markets
+- **Price adapters**:
+  - Chainlink adapter with real on-chain price feeds
+  - Pyth adapter skeleton (for Phase 7)
+  - Price aggregator with fallback strategy
+- **Unit normalization** (`src/blockchain/avantis/units.py`): Single-scaling rule to prevent double-scaling bugs
+- **Calldata builders** (`src/blockchain/avantis/calldata.py`): ABI-encoded transaction data for openPosition/closePosition
+- **AvantisService** (`src/blockchain/avantis/service.py`): Unified facade for all Avantis operations
+- **UX schemas** (`src/bot/schemas/avantis.py`): Pydantic models for open/close requests
+- **Startup validator** (`src/startup/markets_validator.py`): Validates market config on boot
+- **Makefile target**: `make validate-markets` for config verification
+
+### Changed
+- Market catalog now loads from config with verified addresses
+
+### Tests
+- 11 new tests (8 unit, 3 integration), 100% passing
+- Unit tests for normalization, calldata encoding, Chainlink adapter
+- Integration tests for AvantisService validation
+
+### Documentation
+- `PHASE3_SUMMARY.md` with complete implementation details
+- Docstrings on all public APIs
+
