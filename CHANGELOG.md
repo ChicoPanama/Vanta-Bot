@@ -282,3 +282,44 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Bot handlers (/risk, /setrisk, /tpsl)
 - Tests and documentation
 
+
+## Phase 8: Observability & Monitoring — 2025-09-30
+
+### Added
+- **Structured JSON logging**:
+  - src/monitoring/logging.py with component tagging
+  - log() function for uniform JSON output
+  - COMPONENT env var per process (webhook, worker, tpsl, bot)
+- **Prometheus metrics**:
+  - signals_queued_total, signals_rejected_total
+  - exec_processed_total, exec_latency_seconds
+  - queue_depth gauge
+  - tpsl_triggers_total, tpsl_errors_total
+  - loop_heartbeat for health monitoring
+- **Metrics endpoint**: GET /metrics on webhook API (port 8090)
+- **Instrumentation**:
+  - Webhook: tracks queued/rejected signals
+  - Worker: tracks execution status, latency, queue depth
+  - TP/SL executor: tracks triggers and errors
+- **Alert rules**: ops/alerts.rules.yml with Prometheus rules
+  - QueueBacklogHigh, ExecutionFailuresBurst
+  - RejectionSpike, TPSLErrors, WorkerSilent
+- **Makefile targets**:
+  - make metrics-curl: View metrics endpoint
+  - make logs-json: JSON log viewing
+
+### Integration
+- Metrics exposed via FastAPI /metrics
+- Ready for Prometheus scraping
+- Alert rules for operational monitoring
+
+### Tests
+- 2 new tests (100% passing)
+  - Metrics endpoint test
+  - JSON logging shape test
+
+### Documentation
+- Alert rules documented
+- Metric definitions
+- CHANGELOG.md updated
+

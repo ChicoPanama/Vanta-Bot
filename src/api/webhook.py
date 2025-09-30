@@ -7,12 +7,14 @@ import logging
 
 import redis
 from fastapi import FastAPI, HTTPException, Request
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, PlainTextResponse
+from prometheus_client import CONTENT_TYPE_LATEST, generate_latest
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
 from src.api.schemas import SignalIn
 from src.config.settings import settings
+from src.monitoring.metrics import signals_queued, signals_rejected
 from src.repositories.signals_repo import create_execution, upsert_signal
 
 logger = logging.getLogger(__name__)
@@ -80,12 +82,14 @@ async def receive_signal(req: Request):
 
     if not _verify_hmac(body, sig):
         logger.warning("Invalid HMAC signature")
+        signals_rejected.labels(reason="invalid_hmac").inc()
         raise HTTPException(status_code=401, detail="invalid signature")
 
     try:
         data = SignalIn(**json.loads(body.decode()))
     except Exception as e:
         logger.error(f"Invalid signal payload: {e}")
+        signals_rejected.labels(reason="bad_payload").inc()
         raise HTTPException(status_code=400, detail=str(e))
 
     # Build intent key — unique idempotency key
@@ -108,6 +112,9 @@ async def receive_signal(req: Request):
     # Push to queue (RPUSH)
     _get_queue().rpush(settings.SIGNALS_QUEUE, json.dumps({"intent_key": intent_key}))
 
+    # Increment metrics
+    signals_queued.labels(source=data.source).inc()
+
     logger.info(
         f"Signal queued: {intent_key} | source={data.source} | user={data.tg_user_id}"
     )
@@ -118,3 +125,9 @@ async def receive_signal(req: Request):
 async def health():
     """Health check endpoint."""
     return {"status": "ok", "service": "vanta-bot-signals"}
+
+
+@app.get("/metrics")
+async def metrics():
+    """Prometheus metrics endpoint."""
+    return PlainTextResponse(generate_latest(), media_type=CONTENT_TYPE_LATEST)

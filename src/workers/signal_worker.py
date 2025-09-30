@@ -14,6 +14,12 @@ from src.adapters.price.chainlink_adapter import ChainlinkAdapter
 from src.blockchain.avantis.service import AvantisService
 from src.config.settings import settings
 from src.database.models import Signal
+from src.monitoring.metrics import (
+    exec_latency,
+    exec_processed,
+    loop_heartbeat,
+    queue_depth,
+)
 from src.repositories.signals_repo import update_execution
 from src.signals.rules import evaluate_close, evaluate_open
 
@@ -45,10 +51,19 @@ def process_one(w3, Session, price_agg) -> bool:
     Returns:
         True if processed something, False if queue empty
     """
+    start_time = time.time()
     q = _get_queue()
+
+    # Update queue depth metric
+    try:
+        queue_depth.set(q.llen(settings.SIGNALS_QUEUE))
+    except Exception:
+        pass
+
     item = q.lpop(settings.SIGNALS_QUEUE)
 
     if not item:
+        loop_heartbeat.labels(component="worker").set(1)
         return False
 
     payload = json.loads(item.decode())
@@ -87,10 +102,12 @@ def process_one(w3, Session, price_agg) -> bool:
 
         if not decision.allow:
             update_execution(db, intent_key, status="REJECTED", reason=decision.reason)
+            exec_processed.labels(status="REJECTED").inc()
             logger.info(f"Signal rejected: {intent_key} | {decision.reason}")
             return True
 
         update_execution(db, intent_key, status="APPROVED")
+        exec_processed.labels(status="APPROVED").inc()
 
         # Execute via service
         svc = AvantisService(w3, db, price_agg)
@@ -110,11 +127,15 @@ def process_one(w3, Session, price_agg) -> bool:
             )
 
         update_execution(db, intent_key, status="SENT", tx_hash=txh)
+        exec_processed.labels(status="SENT").inc()
+        exec_latency.observe(time.time() - start_time)
+        loop_heartbeat.labels(component="worker").set(1)
         logger.info(f"Signal executed: {intent_key} | tx={txh}")
         return True
 
     except Exception as e:
         update_execution(db, intent_key, status="FAILED", reason=str(e))
+        exec_processed.labels(status="FAILED").inc()
         logger.error(f"Signal failed: {intent_key} | {e}", exc_info=True)
         return True
     finally:

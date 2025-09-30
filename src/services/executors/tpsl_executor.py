@@ -11,6 +11,7 @@ from src.adapters.price.aggregator import PriceAggregator
 from src.adapters.price.chainlink_adapter import ChainlinkAdapter
 from src.blockchain.avantis.service import AvantisService
 from src.config.settings import settings
+from src.monitoring.metrics import loop_heartbeat, tpsl_errors, tpsl_triggers
 from src.repositories.tpsl_repo import deactivate_tpsl, list_tpsl
 
 logger = logging.getLogger(__name__)
@@ -45,6 +46,7 @@ def run_loop():
                         logger.info(
                             f"TP triggered: {rec.symbol} @ {current_price} >= {rec.take_profit_price}"
                         )
+                        tpsl_triggers.labels(type="TP").inc()
                         svc = AvantisService(w3, db, price_agg)
                         # Close 100% of position
                         svc.close_market(
@@ -61,6 +63,7 @@ def run_loop():
                         logger.info(
                             f"SL triggered: {rec.symbol} @ {current_price} <= {rec.stop_loss_price}"
                         )
+                        tpsl_triggers.labels(type="SL").inc()
                         svc = AvantisService(w3, db, price_agg)
                         # Close 100% of position
                         svc.close_market(
@@ -73,15 +76,19 @@ def run_loop():
 
                 except Exception as e:
                     logger.error(f"Failed to process TP/SL {rec.id}: {e}")
+                    tpsl_errors.inc()
 
         except KeyboardInterrupt:
             logger.info("TP/SL executor stopped by user")
             break
         except Exception as e:
             logger.error(f"TP/SL executor error: {e}", exc_info=True)
+            tpsl_errors.inc()
         finally:
             db.close()
 
+        # Set heartbeat
+        loop_heartbeat.labels(component="tpsl").set(1)
         time.sleep(10)  # Check every 10 seconds
 
 
