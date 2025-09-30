@@ -3,8 +3,6 @@ Bot Constants
 Centralized constants for the bot application
 """
 
-from typing import Dict, List
-
 # Message templates
 WELCOME_MESSAGE = """
 🚀 **Welcome to Vanta Bot!**
@@ -37,7 +35,9 @@ FOREX_ASSETS = ["EUR/USD", "GBP/USD", "USD/JPY", "AUD/USD"]
 LEVERAGE_OPTIONS = [1, 2, 5, 10, 20, 50, 100, 200, 500]
 
 # Error messages
-INSUFFICIENT_BALANCE_MESSAGE = "❌ Insufficient USDC balance. Need ${required}, have ${available:.2f}"
+INSUFFICIENT_BALANCE_MESSAGE = (
+    "❌ Insufficient USDC balance. Need ${required}, have ${available:.2f}"
+)
 TRADE_SUCCESS_MESSAGE = """
 ✅ **Trade Executed Successfully!**
 
@@ -70,16 +70,7 @@ Create orders through the trading interface!
 """
 
 # Settings categories
-SETTINGS_CATEGORIES = [
-    "notifications",
-    "risk",
-    "trading", 
-    "security",
-    "about"
-]
+SETTINGS_CATEGORIES = ["notifications", "risk", "trading", "security", "about"]
 
 # User interface types
-USER_INTERFACE_TYPES = {
-    "simple": "Simple Trader",
-    "advanced": "Advanced Trader"
-}
+USER_INTERFACE_TYPES = {"simple": "Simple Trader", "advanced": "Advanced Trader"}

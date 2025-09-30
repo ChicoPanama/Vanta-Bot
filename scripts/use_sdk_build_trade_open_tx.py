@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Let the SDK handle positionSizeUSDC and openPrice automatically
+Use the SDK's build_trade_open_tx method instead of calling contract directly
 """
 
 import asyncio
@@ -28,10 +28,10 @@ os.environ.update(
 )
 
 
-async def let_sdk_handle_values():
-    print("🎯 LET SDK HANDLE VALUES")
+async def use_sdk_build_trade_open_tx():
+    print("🎯 USE SDK BUILD TRADE OPEN TX")
     print("=" * 60)
-    print("⚠️  Let SDK handle positionSizeUSDC and openPrice automatically")
+    print("⚠️  Using SDK build_trade_open_tx method instead of direct contract call")
     print("=" * 60)
 
     try:
@@ -47,20 +47,20 @@ async def let_sdk_handle_values():
         print("✅ TraderClient initialized")
         print(f"✅ Trader address: {address}")
 
-        # Test different collateral and leverage values
+        # Test different parameter values using SDK method
         test_configs = [
+            (100, 10),  # $100 collateral, 10x leverage
+            (500, 10),  # $500 collateral, 10x leverage
             (1000, 10),  # $1000 collateral, 10x leverage
-            (5000, 10),  # $5000 collateral, 10x leverage
-            (10000, 10),  # $10000 collateral, 10x leverage
+            (100, 100),  # $100 collateral, 100x leverage
             (1000, 100),  # $1000 collateral, 100x leverage
-            (5000, 100),  # $5000 collateral, 100x leverage
         ]
 
         for collateral, leverage in test_configs:
             print(f"\n🔍 Testing: ${collateral} collateral, {leverage}x leverage")
 
             try:
-                # Create TradeInput and let SDK handle positionSizeUSDC and openPrice
+                # Create TradeInput using SDK
                 trade_input = TradeInput(
                     pairIndex=0,  # ETH/USD
                     buy=True,  # Long position
@@ -71,16 +71,13 @@ async def let_sdk_handle_values():
                     trader=address,
                 )
 
-                # Don't set positionSizeUSDC and openPrice - let SDK handle them
                 print(f"   📊 TradeInput: {trade_input}")
-                print(f"   📊 positionSizeUSDC: {trade_input.positionSizeUSDC}")
-                print(f"   📊 openPrice: {trade_input.openPrice}")
 
                 # Use SDK's build_trade_open_tx method
                 trade_tx = await trader.trade.build_trade_open_tx(
                     trade_input=trade_input,
                     trade_input_order_type=TradeInputOrderType.MARKET,
-                    slippage_percentage=1000,  # 10% slippage
+                    slippage_percentage=100,  # 1% slippage
                 )
 
                 print("   ✅ Transaction built successfully!")
@@ -97,32 +94,24 @@ async def let_sdk_handle_values():
                     print("\n🎉 BREAKTHROUGH! Found working parameters!")
                     print(f"✅ Collateral: ${collateral}")
                     print(f"✅ Leverage: {leverage}x")
-                    print("✅ Let SDK handle positionSizeUSDC and openPrice")
                     print("✅ Real trade executed on Base mainnet")
                     print("✅ PRODUCTION READY!")
 
                     return True
 
                 except Exception as e:
-                    if "INVALID_SLIPPAGE" in str(e):
-                        print("   ❌ Invalid slippage: INVALID_SLIPPAGE")
-                    elif "BELOW_MIN_POS" in str(e):
-                        print("   ❌ Still too small: BELOW_MIN_POS")
-                    else:
-                        print(f"   ❌ Transaction execution failed: {e}")
-                        continue
+                    print(f"   ❌ Transaction execution failed: {e}")
+                    continue
 
             except Exception as e:
-                if "INVALID_SLIPPAGE" in str(e):
-                    print("   ❌ Invalid slippage: INVALID_SLIPPAGE")
-                elif "BELOW_MIN_POS" in str(e):
+                if "BELOW_MIN_POS" in str(e):
                     print("   ❌ Still too small: BELOW_MIN_POS")
                 else:
                     print(f"   ❌ Failed with: {e}")
                     continue
 
-        print("\n💥 ALL PARAMETER COMBINATIONS FAILED")
-        print("❌ Even letting SDK handle values failed")
+        print("\n💥 ALL SDK PARAMETER COMBINATIONS FAILED")
+        print("❌ Even with $1000 and 100x leverage failed")
         print("❌ Need to find the exact minimum requirements")
 
         return False
@@ -136,12 +125,12 @@ async def let_sdk_handle_values():
 
 
 if __name__ == "__main__":
-    success = asyncio.run(let_sdk_handle_values())
+    success = asyncio.run(use_sdk_build_trade_open_tx())
     if success:
         print("\n🎉 WORKING PARAMETERS FOUND!")
-        print("✅ Bot now works letting SDK handle values!")
+        print("✅ Bot now works with SDK method!")
         print("✅ PRODUCTION READY!")
     else:
-        print("\n💥 ALL PARAMETERS FAILED")
+        print("\n💥 ALL SDK PARAMETERS FAILED")
         print("❌ Need to find exact minimum requirements")
         sys.exit(1)

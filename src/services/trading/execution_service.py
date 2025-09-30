@@ -1,29 +1,31 @@
 from __future__ import annotations
+
+import logging
 from dataclasses import dataclass
 from decimal import Decimal
-from typing import Any, Dict, Optional, Tuple, Union
+from typing import Any
 
-from src.services.trading.trade_drafts import TradeDraft
-from src.services.copy_trading.execution_mode import execution_manager
-from src.config.settings import settings  # unified central settings
 from src.bot.ui.formatting import fmt_usd
+from src.services.copy_trading.execution_mode import execution_manager
+from src.services.trading.trade_drafts import TradeDraft
+from src.utils.obs import log_exc, rid
 from src.utils.resilience import CircuitBreaker, guarded_call
-from src.utils.obs import rid, log_exc
-import logging
+
 log = logging.getLogger("vanta.exec")
 
 # Try to use your Avantis SDK wrapper if present; otherwise fallback
 try:
     from src.integrations.avantis.sdk_client import (
-        get_trader_client,
-        fee_parameters,
-        trading_parameters,
         asset_parameters,
-        tokens,
-        pairs_cache,
         ensure_allowance,
+        fee_parameters,
         get_allowance,
+        get_trader_client,
+        pairs_cache,
+        tokens,
+        trading_parameters,
     )
+
     SDK_AVAILABLE = True
 except Exception as e:
     log.warning(f"Avantis SDK import failed: {e}")
@@ -34,7 +36,7 @@ except Exception as e:
 class QuoteResult:
     ok: bool
     message: str
-    data: Optional[Dict[str, Any]] = None
+    data: dict[str, Any] | None = None
 
 
 SLIPPAGE_STEPS = [Decimal("0.5"), Decimal("1"), Decimal("2")]  # percent choices
@@ -65,7 +67,7 @@ class ExecutionService:
     async def quote_from_draft(
         self,
         draft: TradeDraft,
-        slippage_pct: Optional[Decimal] = None,
+        slippage_pct: Decimal | None = None,
     ) -> QuoteResult:
         """
         Build a trade input from the draft and compute fees/protection/spreads.
@@ -113,29 +115,51 @@ class ExecutionService:
             usdc_required = collateral  # basic margin assumption
 
             # Gather parameters from SDK
-            pair_info = await self._guard("pairs_cache.get_pair_info", lambda: pairs_cache.get_pair_info(pair_symbol))
+            pair_info = await self._guard(
+                "pairs_cache.get_pair_info",
+                lambda: pairs_cache.get_pair_info(pair_symbol),
+            )
             base_asset = pair_info.base if hasattr(pair_info, "base") else pair_symbol
 
             # Fees
-            open_fee = await self._guard("fee_parameters.get_opening_fee", lambda: fee_parameters.get_opening_fee(pair_symbol, notional, side))
+            open_fee = await self._guard(
+                "fee_parameters.get_opening_fee",
+                lambda: fee_parameters.get_opening_fee(pair_symbol, notional, side),
+            )
 
             # Loss protection for the draft trade
-            protection = await self._guard("trading_parameters.get_loss_protection", lambda: trading_parameters.get_loss_protection_for_trade_input(
-                pair_symbol=pair_symbol,
-                side=side,
-                collateral_usdc=float(collateral),
-                leverage=float(leverage),
-            ))
+            protection = await self._guard(
+                "trading_parameters.get_loss_protection",
+                lambda: trading_parameters.get_loss_protection_for_trade_input(
+                    pair_symbol=pair_symbol,
+                    side=side,
+                    collateral_usdc=float(collateral),
+                    leverage=float(leverage),
+                ),
+            )
 
             # Spread & impact
-            spread_bps = await self._guard("asset_parameters.get_pair_spread", lambda: asset_parameters.get_pair_spread(pair_symbol))
-            impact_bps = await self._guard("asset_parameters.get_price_impact", lambda: asset_parameters.get_price_impact_spread(pair_symbol, float(notional)))
+            spread_bps = await self._guard(
+                "asset_parameters.get_pair_spread",
+                lambda: asset_parameters.get_pair_spread(pair_symbol),
+            )
+            impact_bps = await self._guard(
+                "asset_parameters.get_price_impact",
+                lambda: asset_parameters.get_price_impact_spread(
+                    pair_symbol, float(notional)
+                ),
+            )
 
             # Allowance checks
             usdc = await self._guard("tokens.get_usdc", tokens.get_usdc)
             trader = await self._guard("get_trader_client", get_trader_client)
             owner = await self._guard("trader.get_address", trader.get_address)
-            current_allowance = await self._guard("get_allowance", lambda: get_allowance(owner, usdc.address, self.settings.trading_contract))
+            current_allowance = await self._guard(
+                "get_allowance",
+                lambda: get_allowance(
+                    owner, usdc.address, self.settings.trading_contract
+                ),
+            )
             needs_approval = current_allowance < usdc_required
 
             data = {
@@ -159,7 +183,7 @@ class ExecutionService:
         except Exception as e:
             return QuoteResult(False, f"Quote error: {e}")
 
-    async def approve_if_needed(self, usdc_required: Decimal) -> Tuple[bool, str]:
+    async def approve_if_needed(self, usdc_required: Decimal) -> tuple[bool, str]:
         """
         LIVE: send approve tx if allowance insufficient.
         DRY: simulate success.
@@ -171,7 +195,9 @@ class ExecutionService:
             usdc = await tokens.get_usdc()
             trader = await get_trader_client()
             owner = await trader.get_address()
-            current_allowance = await get_allowance(owner, usdc.address, self.settings.trading_contract)
+            current_allowance = await get_allowance(
+                owner, usdc.address, self.settings.trading_contract
+            )
 
             if current_allowance >= usdc_required:
                 return True, "Already approved."
@@ -224,7 +250,7 @@ class ExecutionService:
 
         try:
             pair_symbol = draft.pair
-            side = draft.side.upper()                     # LONG|SHORT
+            side = draft.side.upper()  # LONG|SHORT
             leverage = Decimal(draft.leverage)
             collateral = Decimal(draft.collateral_usdc)
             notional = collateral * leverage
@@ -241,22 +267,37 @@ class ExecutionService:
             # DRY path: simulate
             if not execution_manager.can_execute():
                 fake_hash = "0x" + "d" * 64
-                result = {"tx_hash": fake_hash, "mode": "DRY", "pair": pair_symbol, "side": side, "notional": str(notional)}
+                result = {
+                    "tx_hash": fake_hash,
+                    "mode": "DRY",
+                    "pair": pair_symbol,
+                    "side": side,
+                    "notional": str(notional),
+                }
                 return True, "DRY: trade executed (simulated).", result
 
             # LIVE: build + send
             # NOTE: adapt these calls to your SDK wrapper
             trader = await self._guard("get_trader_client", get_trader_client)
-            tx_hash = await self._guard("trader.market_open", lambda: trader.market_open(
-                pair=pair_symbol,
-                side=side,
-                collateral_usdc=float(collateral),
-                leverage=float(leverage),
-                slippage_pct=float(slippage_pct),
-                order_type="MARKET",  # or MARKET_ZERO_FEE if your strategy qualifies
-            ))
+            tx_hash = await self._guard(
+                "trader.market_open",
+                lambda: trader.market_open(
+                    pair=pair_symbol,
+                    side=side,
+                    collateral_usdc=float(collateral),
+                    leverage=float(leverage),
+                    slippage_pct=float(slippage_pct),
+                    order_type="MARKET",  # or MARKET_ZERO_FEE if your strategy qualifies
+                ),
+            )
 
-            result = {"tx_hash": tx_hash, "mode": "LIVE", "pair": pair_symbol, "side": side, "notional": str(notional)}
+            result = {
+                "tx_hash": tx_hash,
+                "mode": "LIVE",
+                "pair": pair_symbol,
+                "side": side,
+                "notional": str(notional),
+            }
             return True, "Trade sent.", result
 
         except Exception as e:
@@ -280,18 +321,20 @@ class ExecutionService:
                 pair = getattr(p, "pair", None) or getattr(p, "symbol", "UNKNOWN")
                 side = getattr(p, "side", "LONG")
                 size = getattr(p, "notional_usd", None) or getattr(p, "size_usd", None)
-                lev  = getattr(p, "leverage", None)
+                lev = getattr(p, "leverage", None)
                 entry_px = getattr(p, "entry_price", None)
                 pnl = getattr(p, "pnl_usd", None)
-                normalized.append({
-                    "index": idx,
-                    "pair": str(pair),
-                    "side": str(side),
-                    "notional_usd": str(size) if size is not None else None,
-                    "leverage": str(lev) if lev is not None else None,
-                    "entry_px": str(entry_px) if entry_px is not None else None,
-                    "pnl_usd": str(pnl) if pnl is not None else None,
-                })
+                normalized.append(
+                    {
+                        "index": idx,
+                        "pair": str(pair),
+                        "side": str(side),
+                        "notional_usd": str(size) if size is not None else None,
+                        "leverage": str(lev) if lev is not None else None,
+                        "entry_px": str(entry_px) if entry_px is not None else None,
+                        "pnl_usd": str(pnl) if pnl is not None else None,
+                    }
+                )
             return normalized
         except Exception as e:
             logger.error(f"Error normalizing positions: {e}")
@@ -318,17 +361,28 @@ class ExecutionService:
             # DRY simulate
             if not execution_manager.can_execute():
                 fake_hash = "0x" + "c" * 64
-                return True, "DRY: position closed (simulated).", {"tx_hash": fake_hash, "mode": "DRY"}
+                return (
+                    True,
+                    "DRY: position closed (simulated).",
+                    {"tx_hash": fake_hash, "mode": "DRY"},
+                )
 
             trader = await self._guard("get_trader_client", get_trader_client)
-            tx_hash = await self._guard("trader.market_close", lambda: trader.market_close(index=int(position_index), fraction=float(fraction)))
+            tx_hash = await self._guard(
+                "trader.market_close",
+                lambda: trader.market_close(
+                    index=int(position_index), fraction=float(fraction)
+                ),
+            )
             return True, "Close sent.", {"tx_hash": tx_hash, "mode": "LIVE"}
         except Exception as e:
             return False, f"Execute close error: {e}", {}
 
 
 # Global service accessor (simple DI)
-_service: Optional[ExecutionService] = None
+_service: ExecutionService | None = None
+
+
 def get_execution_service(settings) -> ExecutionService:
     global _service
     if _service is None:

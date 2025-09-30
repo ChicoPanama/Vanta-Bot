@@ -7,6 +7,7 @@ import sys
 
 from src.utils.errors import handle_exception
 from src.utils.logging import get_logger
+
 from .app import create_app
 
 logger = get_logger(__name__)

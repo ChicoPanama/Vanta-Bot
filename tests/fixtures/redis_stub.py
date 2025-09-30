@@ -1,5 +1,5 @@
-import time
 import threading
+import time
 
 
 class InMemoryRedis:
@@ -32,7 +32,9 @@ class InMemoryRedis:
         return val if isinstance(val, (bytes, bytearray)) else str(val).encode()
 
     def set(self, key, value, ex=None):
-        self.store[key] = value if isinstance(value, (bytes, bytearray)) else str(value).encode()
+        self.store[key] = (
+            value if isinstance(value, (bytes, bytearray)) else str(value).encode()
+        )
         if ex is not None:
             self.expiry[key] = time.time() + ex
         return True
@@ -41,8 +43,10 @@ class InMemoryRedis:
         self.expiry[key] = time.time() + seconds
         return True
 
-    def info(self, section='memory'):
-        total = sum(len(v) for v in self.store.values() if isinstance(v, (bytes, bytearray)))
+    def info(self, section="memory"):
+        total = sum(
+            len(v) for v in self.store.values() if isinstance(v, (bytes, bytearray))
+        )
         return {"used_memory": total}
 
     def lock(self, key, timeout=5, blocking_timeout=5):
@@ -61,4 +65,3 @@ class InMemoryRedis:
                 lock.release()
 
         return _Ctx()
-

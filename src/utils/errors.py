@@ -3,177 +3,167 @@ Custom Exception Classes
 Centralized error handling for the Vanta Bot
 """
 
-from typing import Optional, Dict, Any
+from typing import Any, Optional
 
 
 class AppError(Exception):
     """Base application error"""
-    
+
     def __init__(
-        self, 
-        message: str, 
+        self,
+        message: str,
         error_code: Optional[str] = None,
-        details: Optional[Dict[str, Any]] = None
+        details: Optional[dict[str, Any]] = None,
     ):
         super().__init__(message)
         self.message = message
         self.error_code = error_code
         self.details = details or {}
-    
-    def to_dict(self) -> Dict[str, Any]:
+
+    def to_dict(self) -> dict[str, Any]:
         """Convert error to dictionary for logging/serialization"""
         return {
             "error_type": self.__class__.__name__,
             "message": self.message,
             "error_code": self.error_code,
-            "details": self.details
+            "details": self.details,
         }
 
 
 class ConfigError(AppError):
     """Configuration-related errors"""
+
     pass
 
 
 class ValidationError(AppError):
     """Input validation errors"""
+
     pass
 
 
 class ExternalAPIError(AppError):
     """External API communication errors"""
-    
+
     def __init__(
         self,
         message: str,
         service: str,
         status_code: Optional[int] = None,
-        response_data: Optional[Dict[str, Any]] = None,
+        response_data: Optional[dict[str, Any]] = None,
         error_code: Optional[str] = None,
-        details: Optional[Dict[str, Any]] = None,
+        details: Optional[dict[str, Any]] = None,
     ):
         super().__init__(message, error_code, details)
         self.service = service
         self.status_code = status_code
         self.response_data = response_data or {}
-        self.details.update({
-            "service": service,
-            "status_code": status_code,
-            "response_data": self.response_data
-        })
+        self.details.update(
+            {
+                "service": service,
+                "status_code": status_code,
+                "response_data": self.response_data,
+            }
+        )
 
 
 class DatabaseError(AppError):
     """Database operation errors"""
+
     pass
 
 
 class BlockchainError(AppError):
     """Blockchain/Web3 related errors"""
-    
+
     def __init__(
-        self, 
-        message: str, 
+        self,
+        message: str,
         network: str,
         tx_hash: Optional[str] = None,
-        error_code: Optional[str] = None
+        error_code: Optional[str] = None,
     ):
         super().__init__(message, error_code)
         self.network = network
         self.tx_hash = tx_hash
-        self.details.update({
-            "network": network,
-            "tx_hash": tx_hash
-        })
+        self.details.update({"network": network, "tx_hash": tx_hash})
 
 
 class TradingError(AppError):
     """Trading operation errors"""
-    
+
     def __init__(
-        self, 
-        message: str, 
+        self,
+        message: str,
         pair: str,
         side: Optional[str] = None,
         amount: Optional[float] = None,
-        error_code: Optional[str] = None
+        error_code: Optional[str] = None,
     ):
         super().__init__(message, error_code)
         self.pair = pair
         self.side = side
         self.amount = amount
-        self.details.update({
-            "pair": pair,
-            "side": side,
-            "amount": amount
-        })
+        self.details.update({"pair": pair, "side": side, "amount": amount})
 
 
 class CopyTradingError(AppError):
     """Copy trading specific errors"""
-    
+
     def __init__(
-        self, 
-        message: str, 
+        self,
+        message: str,
         leader_address: str,
         follower_id: Optional[int] = None,
         pair: Optional[str] = None,
-        error_code: Optional[str] = None
+        error_code: Optional[str] = None,
     ):
         super().__init__(message, error_code)
         self.leader_address = leader_address
         self.follower_id = follower_id
         self.pair = pair
-        self.details.update({
-            "leader_address": leader_address,
-            "follower_id": follower_id,
-            "pair": pair
-        })
+        self.details.update(
+            {"leader_address": leader_address, "follower_id": follower_id, "pair": pair}
+        )
 
 
 class TelegramError(AppError):
     """Telegram bot related errors"""
-    
+
     def __init__(
-        self, 
-        message: str, 
+        self,
+        message: str,
         user_id: Optional[int] = None,
         command: Optional[str] = None,
-        error_code: Optional[str] = None
+        error_code: Optional[str] = None,
     ):
         super().__init__(message, error_code)
         self.user_id = user_id
         self.command = command
-        self.details.update({
-            "user_id": user_id,
-            "command": command
-        })
+        self.details.update({"user_id": user_id, "command": command})
 
 
 class RateLimitError(AppError):
     """Rate limiting errors"""
-    
+
     def __init__(
-        self, 
-        message: str, 
+        self,
+        message: str,
         limit: int,
         window: str,
         user_id: Optional[int] = None,
-        error_code: Optional[str] = None
+        error_code: Optional[str] = None,
     ):
         super().__init__(message, error_code)
         self.limit = limit
         self.window = window
         self.user_id = user_id
-        self.details.update({
-            "limit": limit,
-            "window": window,
-            "user_id": user_id
-        })
+        self.details.update({"limit": limit, "window": window, "user_id": user_id})
 
 
 class SecurityError(AppError):
     """Security-related errors"""
+
     pass
 
 
@@ -191,7 +181,9 @@ class InsufficientFundsError(TradingError):
         amount: Optional[float] = None,
         error_code: Optional[str] = None,
     ):
-        super().__init__(message, pair=pair, side=side, amount=amount, error_code=error_code)
+        super().__init__(
+            message, pair=pair, side=side, amount=amount, error_code=error_code
+        )
         self.required = required
         self.available = available
         if required is not None:
@@ -213,13 +205,16 @@ class InvalidPositionError(TradingError):
         amount: Optional[float] = None,
         error_code: Optional[str] = None,
     ):
-        super().__init__(message, pair=pair, side=side, amount=amount, error_code=error_code)
+        super().__init__(
+            message, pair=pair, side=side, amount=amount, error_code=error_code
+        )
         self.size = size
         self.details.update({"size": size})
 
 
 class MarketClosedError(TradingError):
     """Market is closed for trading"""
+
     pass
 
 
@@ -237,7 +232,9 @@ class SlippageExceededError(TradingError):
         amount: Optional[float] = None,
         error_code: Optional[str] = None,
     ):
-        super().__init__(message, pair=pair, side=side, amount=amount, error_code=error_code)
+        super().__init__(
+            message, pair=pair, side=side, amount=amount, error_code=error_code
+        )
         self.slippage = slippage
         self.max_slippage = max_slippage
         if slippage is not None:
@@ -248,6 +245,7 @@ class SlippageExceededError(TradingError):
 
 class LeaderNotFoundError(CopyTradingError):
     """Copy trading leader not found"""
+
     pass
 
 
@@ -301,13 +299,15 @@ class CopyLimitExceededError(CopyTradingError):
         self.details.update({"current_count": current_count, "max_count": max_count})
 
 
-def handle_exception(exc: Exception, context: Optional[Dict[str, Any]] = None) -> AppError:
+def handle_exception(
+    exc: Exception, context: Optional[dict[str, Any]] = None
+) -> AppError:
     """Convert any exception to AppError with context"""
     if isinstance(exc, AppError):
         if context:
             exc.details.update(context)
         return exc
-    
+
     # Convert common exceptions to AppError
     if isinstance(exc, ValueError):
         return ValidationError(str(exc), details=context or {})
@@ -328,9 +328,9 @@ def handle_exception(exc: Exception, context: Optional[Dict[str, Any]] = None) -
         )
     else:
         return AppError(
-            f"Unexpected error: {exc}", 
+            f"Unexpected error: {exc}",
             error_code="UNEXPECTED_ERROR",
-            details=context or {}
+            details=context or {},
         )
 
 

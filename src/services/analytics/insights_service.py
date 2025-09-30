@@ -3,10 +3,11 @@
 from __future__ import annotations
 
 from collections import defaultdict
+from collections.abc import Iterable
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from statistics import mean
-from typing import Any, Dict, Iterable, List, Optional
+from typing import Any
 
 from sqlalchemy import func, select
 
@@ -41,7 +42,7 @@ class _Signal:
         modifier = 0.2 if abs(self.average_pnl) > 75 else 0.0
         return round(min(0.95, base + modifier), 2)
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         return {
             "symbol": self.symbol,
             "signal": self.sentiment,
@@ -56,10 +57,10 @@ class InsightsService(BaseService):
     """Generate leaderboard, market signals, and trader analytics from DB state."""
 
     # BaseService contract: simple permissive validation for analytics fetches
-    def validate_input(self, data: Dict[str, Any]) -> bool:  # type: ignore[override]
+    def validate_input(self, data: dict[str, Any]) -> bool:  # type: ignore[override]
         return True
 
-    async def get_leaderboard(self, limit: int = 10) -> List[Dict[str, Any]]:
+    async def get_leaderboard(self, limit: int = 10) -> list[dict[str, Any]]:
         self.log_operation("get_leaderboard", limit=limit)
 
         async def _query(session):
@@ -71,7 +72,9 @@ class InsightsService(BaseService):
                     func.count(models.Position.id).label("trade_count"),
                     func.sum(models.Position.pnl).label("total_pnl"),
                     func.avg(models.Position.pnl).label("avg_pnl"),
-                    func.sum(models.Position.size * models.Position.leverage).label("notional"),
+                    func.sum(models.Position.size * models.Position.leverage).label(
+                        "notional"
+                    ),
                     func.max(models.Position.closed_at).label("last_trade_at"),
                 )
                 .join(models.Position, models.Position.user_id == models.User.id)
@@ -84,10 +87,14 @@ class InsightsService(BaseService):
             return result.all()
 
         rows = await db.run_in_session(_query)
-        leaderboard: List[Dict[str, Any]] = []
+        leaderboard: list[dict[str, Any]] = []
         for row in rows:
             user_id = row.id
-            handle = f"@{row.username}" if row.username else (f"tg:{row.telegram_id}" if row.telegram_id else f"user:{user_id}")
+            handle = (
+                f"@{row.username}"
+                if row.username
+                else (f"tg:{row.telegram_id}" if row.telegram_id else f"user:{user_id}")
+            )
             trade_count = int(row.trade_count or 0)
             total_pnl = float(row.total_pnl or 0.0)
             notional = float(row.notional or 0.0)
@@ -114,20 +121,17 @@ class InsightsService(BaseService):
 
         return leaderboard
 
-    async def get_market_signal(self) -> Dict[str, Any]:
+    async def get_market_signal(self) -> dict[str, Any]:
         self.log_operation("get_market_signal")
 
         async def _query(session):
-            stmt = (
-                select(
-                    models.Position.symbol,
-                    models.Position.pnl,
-                    models.Position.size,
-                    models.Position.leverage,
-                    models.Position.opened_at,
-                )
-                .where(models.Position.status == "OPEN")
-            )
+            stmt = select(
+                models.Position.symbol,
+                models.Position.pnl,
+                models.Position.size,
+                models.Position.leverage,
+                models.Position.opened_at,
+            ).where(models.Position.status == "OPEN")
             result = await session.execute(stmt)
             return result.all()
 
@@ -163,10 +167,10 @@ class InsightsService(BaseService):
             "reasoning": reasoning,
         }
 
-    async def get_copy_opportunities(self) -> List[Dict[str, Any]]:
+    async def get_copy_opportunities(self) -> list[dict[str, Any]]:
         self.log_operation("get_copy_opportunities")
         leaderboard = await self.get_leaderboard(limit=20)
-        opportunities: List[Dict[str, Any]] = []
+        opportunities: list[dict[str, Any]] = []
 
         for entry in leaderboard:
             if entry["copyability_score"] < 40:
@@ -186,7 +190,7 @@ class InsightsService(BaseService):
 
         return opportunities
 
-    async def get_dashboard(self) -> Dict[str, Any]:
+    async def get_dashboard(self) -> dict[str, Any]:
         self.log_operation("get_dashboard")
         signals = await self._collect_signals()
         market_signal = await self.get_market_signal()
@@ -204,7 +208,9 @@ class InsightsService(BaseService):
         else:
             regime = "mixed"
 
-        confidence = round(min(0.95, market_signal["confidence"] + len(signals) * 0.02), 2)
+        confidence = round(
+            min(0.95, market_signal["confidence"] + len(signals) * 0.02), 2
+        )
 
         return {
             "regime": regime,
@@ -212,7 +218,7 @@ class InsightsService(BaseService):
             "signals": top_signals,
         }
 
-    async def get_market_analysis(self) -> Dict[str, Any]:
+    async def get_market_analysis(self) -> dict[str, Any]:
         self.log_operation("get_market_analysis")
         signals = await self._collect_signals()
         if not signals:
@@ -255,19 +261,16 @@ class InsightsService(BaseService):
             "key_insights": key_insights,
         }
 
-    async def get_trader_analytics_summary(self) -> Dict[str, Any]:
+    async def get_trader_analytics_summary(self) -> dict[str, Any]:
         self.log_operation("get_trader_analytics_summary")
 
         async def _query(session):
-            stmt = (
-                select(
-                    models.Position.user_id,
-                    func.count(models.Position.id).label("trade_count"),
-                    func.sum(models.Position.pnl).label("total_pnl"),
-                    func.avg(models.Position.pnl).label("avg_pnl"),
-                )
-                .group_by(models.Position.user_id)
-            )
+            stmt = select(
+                models.Position.user_id,
+                func.count(models.Position.id).label("trade_count"),
+                func.sum(models.Position.pnl).label("total_pnl"),
+                func.avg(models.Position.pnl).label("avg_pnl"),
+            ).group_by(models.Position.user_id)
             result = await session.execute(stmt)
             return result.all()
 
@@ -280,9 +283,9 @@ class InsightsService(BaseService):
                 "top_archetypes": [],
             }
 
-        archetype_counts: Dict[str, int] = defaultdict(int)
+        archetype_counts: dict[str, int] = defaultdict(int)
         active = 0
-        performances: List[float] = []
+        performances: list[float] = []
 
         for row in rows:
             trade_count = int(row.trade_count or 0)
@@ -295,16 +298,22 @@ class InsightsService(BaseService):
             if trade_count:
                 performances.append(total_pnl / trade_count)
 
-        top_archetypes = [f"{name} ({count})" for name, count in sorted(archetype_counts.items(), key=lambda x: x[1], reverse=True)[:3]]
+        top_archetypes = [
+            f"{name} ({count})"
+            for name, count in sorted(
+                archetype_counts.items(), key=lambda x: x[1], reverse=True
+            )[:3]
+        ]
 
         return {
             "total_traders": len(rows),
             "active_traders": active,
-            "avg_performance": _safe_mean(performances) / 100,  # convert to percentage-ish scale
+            "avg_performance": _safe_mean(performances)
+            / 100,  # convert to percentage-ish scale
             "top_archetypes": top_archetypes,
         }
 
-    async def _collect_signals(self) -> List[_Signal]:
+    async def _collect_signals(self) -> list[_Signal]:
         async def _query(session):
             stmt = (
                 select(
@@ -321,7 +330,7 @@ class InsightsService(BaseService):
             return result.all()
 
         rows = await db.run_in_session(_query)
-        signals: List[_Signal] = []
+        signals: list[_Signal] = []
         for row in rows:
             if row.symbol is None:
                 continue
@@ -342,10 +351,10 @@ class InsightsService(BaseService):
             return 0.0
         avg = sum(items) / len(items)
         variance = sum((v - avg) ** 2 for v in items) / len(items)
-        return variance ** 0.5
+        return variance**0.5
 
     @staticmethod
-    def _format_ts(value: Optional[datetime]) -> Optional[str]:
+    def _format_ts(value: datetime | None) -> str | None:
         if not value:
             return None
         if value.tzinfo is None:
@@ -373,7 +382,9 @@ class InsightsService(BaseService):
         return "LOW"
 
     @staticmethod
-    def _score_copyability(total_pnl: float, trade_count: int, avg_ticket: float) -> int:
+    def _score_copyability(
+        total_pnl: float, trade_count: int, avg_ticket: float
+    ) -> int:
         pnl_score = min(40, max(-20, total_pnl / 1000))
         activity_score = min(35, trade_count * 0.2)
         discipline_bonus = 15 if 1000 <= avg_ticket <= 20000 else 5
@@ -381,7 +392,5 @@ class InsightsService(BaseService):
         return int(min(100, raw))
 
     @staticmethod
-    def _build_opportunity_reason(entry: Dict[str, Any]) -> str:
-        return (
-            f"Consistent performance: {entry['trade_count']} trades with total PnL ${entry['total_pnl']:,.0f}."
-        )
+    def _build_opportunity_reason(entry: dict[str, Any]) -> str:
+        return f"Consistent performance: {entry['trade_count']} trades with total PnL ${entry['total_pnl']:,.0f}."

@@ -1,23 +1,27 @@
 from __future__ import annotations
+
 from decimal import Decimal
+
 from telegram import Update
 from telegram.ext import CallbackQueryHandler, CommandHandler, ContextTypes
 
-from src.services.trading.trade_drafts import draft_store
-from src.services.trading.execution_service import get_execution_service, SLIPPAGE_STEPS
+from src.bot.ui.formatting import fmt_usd
 from src.bot.ui.keyboards import kb
-from src.bot.ui.formatting import fmt_usd, fmt_px
 from src.config.settings import settings  # unified central settings
-from src.utils.ratelimit import quote_limiter
+from src.services.trading.execution_service import SLIPPAGE_STEPS, get_execution_service
+from src.services.trading.trade_drafts import draft_store
 from src.services.users.user_prefs import prefs_store
+from src.utils.ratelimit import quote_limiter
 
 # Import for mode badge
 try:
-  from src.config.flags_standalone import is_live
+    from src.config.flags_standalone import is_live
 except ImportError:
-  def is_live():
-    import os
-    return os.getenv("COPY_EXECUTION_MODE", "DRY").upper() == "LIVE"
+
+    def is_live():
+        import os
+
+        return os.getenv("COPY_EXECUTION_MODE", "DRY").upper() == "LIVE"
 
 
 def _slippage_row(pair: str, current: Decimal):
@@ -36,7 +40,7 @@ def _quote_card_text(qd):
     side = qd.get("side")
     lev = qd.get("leverage")
     col = qd.get("collateral_usdc")
-    
+
     # Add mode badge
     mode_badge = "(LIVE)" if is_live() else "(DRY)"
     notional = qd.get("notional_usd")
@@ -72,11 +76,11 @@ def _quote_card_text(qd):
 async def cb_show_quote(update: Update, context: ContextTypes.DEFAULT_TYPE):
     q = update.callback_query
     await q.answer()
-    
+
     if not quote_limiter.allow(q.from_user.id):
         await q.answer("Slow down a sec…", show_alert=False)
         return
-    
+
     _, _, pair = q.data.split(":")
     d = draft_store.get(q.from_user.id)
 
@@ -101,7 +105,13 @@ async def cb_show_quote(update: Update, context: ContextTypes.DEFAULT_TYPE):
     txt = _quote_card_text(qd)
 
     needs_approval = bool(qd.get("needs_approval"))
-    slip = Decimal(str(qd.get("slippage_pct") or context.user_data.get("slippage_pct") or settings.default_slippage_pct))
+    slip = Decimal(
+        str(
+            qd.get("slippage_pct")
+            or context.user_data.get("slippage_pct")
+            or settings.default_slippage_pct
+        )
+    )
 
     rows = []
     # slippage selection row
@@ -109,7 +119,7 @@ async def cb_show_quote(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     # derive size_usd and lev for the inline analyzer (educational)
     size_usd = qd.get("collateral_usdc") or "0"
-    lev_str  = qd.get("leverage") or "1"
+    lev_str = qd.get("leverage") or "1"
     rows += [[("📚 View Risk", f"qt:viewrisk:{qd.get('pair')}:{size_usd}:{lev_str}")]]
 
     # actions
@@ -125,15 +135,18 @@ async def cb_show_quote(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def cb_set_slippage(update: Update, context: ContextTypes.DEFAULT_TYPE):
     q = update.callback_query
     await q.answer()
-    
+
     if not quote_limiter.allow(q.from_user.id):
         await q.answer("Slow down a sec…", show_alert=False)
         return
-    
+
     _, _, pair, slip = q.data.split(":")
     d = draft_store.get(q.from_user.id)
     if not d:
-        await q.edit_message_text("No draft found. Go back to /markets.", reply_markup=kb([[("⬅️ Markets", "nav:markets")]]))
+        await q.edit_message_text(
+            "No draft found. Go back to /markets.",
+            reply_markup=kb([[("⬅️ Markets", "nav:markets")]]),
+        )
         return
 
     # Requote with chosen slippage (store in context.user_data for Phase 4 usage)
@@ -142,7 +155,10 @@ async def cb_set_slippage(update: Update, context: ContextTypes.DEFAULT_TYPE):
     svc = get_execution_service(settings)
     res = await svc.quote_from_draft(draft=d, slippage_pct=Decimal(slip))
     if not res.ok:
-        await q.edit_message_text(f"❌ {res.message}", reply_markup=kb([[("⬅️ Back to Pair", f"pair:{d.pair}")]]))
+        await q.edit_message_text(
+            f"❌ {res.message}",
+            reply_markup=kb([[("⬅️ Back to Pair", f"pair:{d.pair}")]]),
+        )
         return
 
     qd = res.data or {}
@@ -150,12 +166,12 @@ async def cb_set_slippage(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     rows = []
     rows += _slippage_row(pair, Decimal(slip))
-    
+
     # derive size_usd and lev for the inline analyzer (educational)
     size_usd = qd.get("collateral_usdc") or "0"
-    lev_str  = qd.get("leverage") or "1"
+    lev_str = qd.get("leverage") or "1"
     rows += [[("📚 View Risk", f"qt:viewrisk:{qd.get('pair')}:{size_usd}:{lev_str}")]]
-    
+
     if bool(qd.get("needs_approval")):
         rows.append([("✅ Approve USDC", f"qt:approve:{pair}")])
     rows.append([("🚀 Proceed to Execute (Phase 4)", f"qt:exec:{pair}")])
@@ -171,7 +187,9 @@ async def cb_approve(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     d = draft_store.get(q.from_user.id)
     if not d:
-        await q.edit_message_text("No draft found.", reply_markup=kb([[("⬅️ Markets", "nav:markets")]]))
+        await q.edit_message_text(
+            "No draft found.", reply_markup=kb([[("⬅️ Markets", "nav:markets")]])
+        )
         return
 
     svc = get_execution_service(settings)
@@ -179,7 +197,9 @@ async def cb_approve(update: Update, context: ContextTypes.DEFAULT_TYPE):
     # Recompute quote to ensure we have up-to-date usdc_required
     res = await svc.quote_from_draft(draft=d)
     if not res.ok or not res.data:
-        await q.edit_message_text(f"❌ {res.message}", reply_markup=kb([[("⬅️ Back to Pair", f"pair:{pair}")]]))
+        await q.edit_message_text(
+            f"❌ {res.message}", reply_markup=kb([[("⬅️ Back to Pair", f"pair:{pair}")]])
+        )
         return
 
     usdc_required = Decimal(str(res.data.get("usdc_required") or "0"))
@@ -188,13 +208,22 @@ async def cb_approve(update: Update, context: ContextTypes.DEFAULT_TYPE):
     # Re-draw quote after approve attempt
     res2 = await svc.quote_from_draft(draft=d)
     if not res2.ok:
-        await q.edit_message_text(f"{'✅' if ok else '❌'} {msg}\n\n{res2.message}", reply_markup=kb([[("⬅️ Back to Pair", f"pair:{pair}")]]))
+        await q.edit_message_text(
+            f"{'✅' if ok else '❌'} {msg}\n\n{res2.message}",
+            reply_markup=kb([[("⬅️ Back to Pair", f"pair:{pair}")]]),
+        )
         return
 
     qd = res2.data or {}
     txt = _quote_card_text(qd)
     needs_approval = bool(qd.get("needs_approval"))
-    slip = Decimal(str(qd.get("slippage_pct") or context.user_data.get("slippage_pct") or settings.default_slippage_pct))
+    slip = Decimal(
+        str(
+            qd.get("slippage_pct")
+            or context.user_data.get("slippage_pct")
+            or settings.default_slippage_pct
+        )
+    )
 
     rows = []
     rows += _slippage_row(pair, slip)
@@ -204,7 +233,9 @@ async def cb_approve(update: Update, context: ContextTypes.DEFAULT_TYPE):
     rows.append([("⬅️ Back to Pair", f"pair:{pair}")])
 
     prefix = "✅ " if ok else "❌ "
-    await q.edit_message_text(prefix + msg + "\n\n" + txt, parse_mode="Markdown", reply_markup=kb(rows))
+    await q.edit_message_text(
+        prefix + msg + "\n\n" + txt, parse_mode="Markdown", reply_markup=kb(rows)
+    )
 
 
 def _result_card(ok, msg, tx_hash=None, pair=None, side=None):
@@ -218,6 +249,7 @@ def _result_card(ok, msg, tx_hash=None, pair=None, side=None):
         base += f"\n*trade:* {pair} {side}"
     return base
 
+
 async def cb_exec_trade(update: Update, context: ContextTypes.DEFAULT_TYPE):
     q = update.callback_query
     await q.answer()
@@ -225,7 +257,10 @@ async def cb_exec_trade(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     d = draft_store.get(q.from_user.id)
     if not d or d.pair != pair:
-        await q.edit_message_text("No draft found; go back to /markets.", reply_markup=kb([[("⬅️ Markets", "nav:markets")]]))
+        await q.edit_message_text(
+            "No draft found; go back to /markets.",
+            reply_markup=kb([[("⬅️ Markets", "nav:markets")]]),
+        )
         return
 
     # slippage from user context if set
@@ -254,17 +289,22 @@ async def cmd_a_quote(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if len(args) < 4:
         await update.effective_chat.send_message(
             "Usage: `/a_quote <PAIR> <SIDE> <COLL_USDC> <LEV> [slip%]`",
-            parse_mode="Markdown"
+            parse_mode="Markdown",
         )
         return
 
     pair, side, coll, lev = args[:4]
-    slip = Decimal(args[4]) if len(args) > 4 else Decimal(str(settings.default_slippage_pct or 1))
+    slip = (
+        Decimal(args[4])
+        if len(args) > 4
+        else Decimal(str(settings.default_slippage_pct or 1))
+    )
 
     # Build a temporary draft
     draft = draft_store.get(update.effective_user.id)
     if not draft or draft.pair != pair:
         from src.services.trading.trade_drafts import TradeDraft
+
         draft = TradeDraft(
             user_id=update.effective_user.id,
             pair=pair,
@@ -293,5 +333,7 @@ def register(app):
     app.add_handler(CallbackQueryHandler(cb_show_quote, pattern=r"^qt:quote:.+"))
     app.add_handler(CallbackQueryHandler(cb_set_slippage, pattern=r"^qt:slip:.+"))
     app.add_handler(CallbackQueryHandler(cb_approve, pattern=r"^qt:approve:.+"))
-    app.add_handler(CallbackQueryHandler(cb_exec_trade, pattern=r"^qt:exec:.+"))  # ← now executes
+    app.add_handler(
+        CallbackQueryHandler(cb_exec_trade, pattern=r"^qt:exec:.+")
+    )  # ← now executes
     app.add_handler(CommandHandler("a_quote", cmd_a_quote))

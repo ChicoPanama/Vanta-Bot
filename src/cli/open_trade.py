@@ -26,8 +26,7 @@ from src.services.trade_service import TradeService
 
 # Setup logging
 logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(levelname)s - %(message)s'
+    level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s"
 )
 logger = logging.getLogger(__name__)
 
@@ -47,85 +46,77 @@ Examples:
 
   # Test trade parameters without executing (dry run)
   python -m src.cli.open_trade --collat 50 --lev 3 --slip 1 --pair 2 --long
-        """
+        """,
     )
-    
+
     # Required parameters
     parser.add_argument(
-        "--collat", "--collateral",
+        "--collat",
+        "--collateral",
         type=float,
         required=True,
-        help="Collateral amount in USDC (e.g., 10 for $10)"
+        help="Collateral amount in USDC (e.g., 10 for $10)",
     )
-    
+
     parser.add_argument(
-        "--lev", "--leverage",
+        "--lev",
+        "--leverage",
         type=float,
         required=True,
-        help="Leverage multiplier (e.g., 2 for 2x leverage)"
+        help="Leverage multiplier (e.g., 2 for 2x leverage)",
     )
-    
+
     parser.add_argument(
-        "--slip", "--slippage",
+        "--slip",
+        "--slippage",
         type=float,
         required=True,
-        help="Slippage percentage (e.g., 1 for 1% slippage)"
+        help="Slippage percentage (e.g., 1 for 1% slippage)",
     )
-    
+
     parser.add_argument(
         "--pair",
         type=int,
         required=True,
-        help="Trading pair index (0=BTC, 1=ETH, 2=SOL)"
+        help="Trading pair index (0=BTC, 1=ETH, 2=SOL)",
     )
-    
+
     # Direction (mutually exclusive)
     direction_group = parser.add_mutually_exclusive_group(required=True)
     direction_group.add_argument(
-        "--long",
-        action="store_true",
-        help="Open long position"
+        "--long", action="store_true", help="Open long position"
     )
     direction_group.add_argument(
-        "--short",
-        action="store_true",
-        help="Open short position"
+        "--short", action="store_true", help="Open short position"
     )
-    
+
     # Optional parameters
     parser.add_argument(
-        "--live",
-        action="store_true",
-        help="Execute live trade (default is dry run)"
+        "--live", action="store_true", help="Execute live trade (default is dry run)"
     )
-    
+
     parser.add_argument(
-        "--rpc",
-        type=str,
-        default="https://mainnet.base.org",
-        help="RPC endpoint URL"
+        "--rpc", type=str, default="https://mainnet.base.org", help="RPC endpoint URL"
     )
-    
+
     parser.add_argument(
         "--config",
         type=str,
         default="config/addresses/base.mainnet.json",
-        help="Network configuration file path"
+        help="Network configuration file path",
     )
-    
+
     parser.add_argument(
-        "--verbose", "-v",
-        action="store_true",
-        help="Enable verbose logging"
+        "--verbose", "-v", action="store_true", help="Enable verbose logging"
     )
-    
+
     return parser.parse_args()
 
 
 def load_environment() -> tuple[str, str]:
     """
     Load environment variables for RPC URL and private key.
-    
+
     Returns:
         Tuple of (rpc_url, private_key)
     """
@@ -133,11 +124,12 @@ def load_environment() -> tuple[str, str]:
     env_file = Path("env/.env")
     if env_file.exists():
         from dotenv import load_dotenv
+
         load_dotenv(env_file)
-    
+
     # Get RPC URL
     rpc_url = os.getenv("BASE_RPC_URL", "https://mainnet.base.org")
-    
+
     # Get private key
     private_key = os.getenv("TRADER_PRIVATE_KEY")
     if not private_key:
@@ -145,22 +137,22 @@ def load_environment() -> tuple[str, str]:
             "TRADER_PRIVATE_KEY environment variable not set. "
             "Please set it in env/.env or export it directly."
         )
-    
+
     return rpc_url, private_key
 
 
 def validate_arguments(args: argparse.Namespace) -> None:
     """
     Validate command line arguments.
-    
+
     Args:
         args: Parsed command line arguments
-        
+
     Raises:
         ValueError: If arguments are invalid
     """
     errors = []
-    
+
     # Validate collateral
     if args.collat <= 0:
         errors.append("Collateral must be positive")
@@ -168,7 +160,7 @@ def validate_arguments(args: argparse.Namespace) -> None:
         errors.append("Minimum collateral is $1 USDC")
     elif args.collat > 100000:
         errors.append("Maximum collateral is $100,000 USDC")
-    
+
     # Validate leverage
     if args.lev <= 0:
         errors.append("Leverage must be positive")
@@ -176,21 +168,23 @@ def validate_arguments(args: argparse.Namespace) -> None:
         errors.append("Minimum leverage is 1x")
     elif args.lev > 500:
         errors.append("Maximum leverage is 500x")
-    
+
     # Validate slippage
     if args.slip < 0:
         errors.append("Slippage cannot be negative")
     elif args.slip > 10:
         errors.append("Maximum slippage is 10%")
-    
+
     # Validate pair index
     if args.pair < 0:
         errors.append("Pair index must be non-negative")
     elif args.pair > 100:  # Conservative limit
         errors.append("Pair index too high")
-    
+
     if errors:
-        raise ValueError("Invalid arguments:\n" + "\n".join(f"  - {error}" for error in errors))
+        raise ValueError(
+            "Invalid arguments:\n" + "\n".join(f"  - {error}" for error in errors)
+        )
 
 
 async def main():
@@ -198,21 +192,21 @@ async def main():
     try:
         # Parse arguments
         args = parse_args()
-        
+
         # Set logging level
         if args.verbose:
             logging.getLogger().setLevel(logging.DEBUG)
-        
+
         # Validate arguments
         validate_arguments(args)
-        
+
         # Load environment
         rpc_url, private_key = load_environment()
-        
+
         # Override RPC URL if provided
         if args.rpc != "https://mainnet.base.org":
             rpc_url = args.rpc
-        
+
         # Create trade parameters
         params = HumanTradeParams(
             collateral_usdc=Decimal(str(args.collat)),
@@ -220,16 +214,14 @@ async def main():
             slippage_pct=Decimal(str(args.slip)),
             pair_index=args.pair,
             is_long=args.long,
-            order_type=OrderType.MARKET
+            order_type=OrderType.MARKET,
         )
-        
+
         # Initialize trade service
         trade_service = TradeService(
-            rpc_url=rpc_url,
-            private_key=private_key,
-            network_config_path=args.config
+            rpc_url=rpc_url, private_key=private_key, network_config_path=args.config
         )
-        
+
         # Print trade summary
         print("=" * 60)
         print("AVANTIS TRADE SUMMARY")
@@ -241,20 +233,19 @@ async def main():
         print(f"Direction: {'LONG' if params.is_long else 'SHORT'}")
         print(f"Mode: {'LIVE' if args.live else 'DRY RUN'}")
         print("=" * 60)
-        
+
         # Confirm live trade
         if args.live:
             confirm = input("\n⚠️  LIVE TRADE - Are you sure? (yes/no): ")
             if confirm.lower() != "yes":
                 print("Trade cancelled.")
                 return
-        
+
         # Execute trade
         result = await trade_service.open_market_trade(
-            params=params,
-            dry_run=not args.live
+            params=params, dry_run=not args.live
         )
-        
+
         # Print result
         print("\n" + "=" * 60)
         if result.success:
@@ -263,17 +254,19 @@ async def main():
                 print("Dry run completed successfully - trade would execute")
             else:
                 print(f"Transaction Hash: {result.transaction_hash}")
-                print(f"BaseScan URL: https://basescan.org/tx/{result.transaction_hash}")
+                print(
+                    f"BaseScan URL: https://basescan.org/tx/{result.transaction_hash}"
+                )
                 print(f"Block Number: {result.block_number}")
                 print(f"Gas Used: {result.gas_used}")
         else:
             print("❌ TRADE FAILED")
             print(f"Error: {result.error_message}")
         print("=" * 60)
-        
+
         # Exit with appropriate code
         sys.exit(0 if result.success else 1)
-        
+
     except KeyboardInterrupt:
         print("\nTrade cancelled by user.")
         sys.exit(1)

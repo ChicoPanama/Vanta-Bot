@@ -1,24 +1,31 @@
 from __future__ import annotations
+
 from decimal import Decimal
-from typing import Dict, Any, List
+
 from sqlalchemy import text
 from sqlalchemy.engine import Engine
+
 from .fifo_pnl import realized_pnl_fifo
+
 
 class PnlService:
     def __init__(self, engine: Engine):
         self.engine = engine
 
     def clean_realized_pnl_30d(self, address: str) -> Decimal:
-        sql = text("""
+        sql = text(
+            """
             select side, is_long, size, price, fee
             from fills
             where address = :addr
               and ts >= (strftime('%s', 'now') - 30 * 24 * 60 * 60)
             order by ts asc, id asc
-        """)
+        """
+        )
         with self.engine.begin() as conn:
-            rows = [dict(r._mapping) for r in conn.execute(sql, {"addr": address.lower()})]
+            rows = [
+                dict(r._mapping) for r in conn.execute(sql, {"addr": address.lower()})
+            ]
 
         # Split by direction for correct sign handling
         long_stream = []
@@ -50,11 +57,15 @@ class PnlService:
                 while remain > 0 and lots:
                     lot_size, lot_px = lots[0]
                     take = min(lot_size, remain)
-                    pnl_short += (lot_px - price) * take  # short benefits when price drops
+                    pnl_short += (
+                        lot_px - price
+                    ) * take  # short benefits when price drops
                     lot_size -= take
                     remain -= take
-                    if lot_size == 0: lots.pop(0)
-                    else: lots[0] = (lot_size, lot_px)
+                    if lot_size == 0:
+                        lots.pop(0)
+                    else:
+                        lots[0] = (lot_size, lot_px)
             pnl_short -= fee
 
         return pnl_long + pnl_short

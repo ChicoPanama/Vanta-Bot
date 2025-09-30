@@ -1,2 +1,1 @@
-from . import copy_store
-from . import copy_service
+from . import copy_service, copy_store

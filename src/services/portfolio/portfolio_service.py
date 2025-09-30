@@ -1,7 +1,7 @@
 """Portfolio Service business logic using async database helpers."""
 
 from datetime import datetime, timedelta
-from typing import Any, Dict
+from typing import Any
 
 from src.database.operations import db
 from src.services.base_service import BaseService
@@ -10,7 +10,7 @@ from src.services.base_service import BaseService
 class PortfolioService(BaseService):
     """Service for portfolio management and analytics."""
 
-    async def get_portfolio_summary(self, user_id: int) -> Dict[str, Any]:
+    async def get_portfolio_summary(self, user_id: int) -> dict[str, Any]:
         """Get comprehensive portfolio summary."""
         self.log_operation("get_portfolio_summary", user_id)
 
@@ -26,13 +26,23 @@ class PortfolioService(BaseService):
         total_pnl = float(sum(pos.pnl or 0 for pos in closed_positions))
         unrealized_pnl = float(sum(pos.pnl or 0 for pos in open_positions))
 
-        total_volume = float(sum((pos.size or 0) * (pos.leverage or 0) for pos in positions))
-        total_exposure = float(sum((pos.size or 0) * (pos.leverage or 0) for pos in open_positions))
+        total_volume = float(
+            sum((pos.size or 0) * (pos.leverage or 0) for pos in positions)
+        )
+        total_exposure = float(
+            sum((pos.size or 0) * (pos.leverage or 0) for pos in open_positions)
+        )
 
         avg_win_values = [pos.pnl for pos in closed_positions if (pos.pnl or 0) > 0]
         avg_loss_values = [pos.pnl for pos in closed_positions if (pos.pnl or 0) < 0]
-        avg_win = float(sum(avg_win_values) / len(avg_win_values)) if avg_win_values else 0.0
-        avg_loss = float(sum(avg_loss_values) / len(avg_loss_values)) if avg_loss_values else 0.0
+        avg_win = (
+            float(sum(avg_win_values) / len(avg_win_values)) if avg_win_values else 0.0
+        )
+        avg_loss = (
+            float(sum(avg_loss_values) / len(avg_loss_values))
+            if avg_loss_values
+            else 0.0
+        )
         profit_factor = abs(avg_win / avg_loss) if avg_loss else 0.0
 
         thirty_days_ago = datetime.utcnow() - timedelta(days=30)
@@ -55,8 +65,16 @@ class PortfolioService(BaseService):
             "avg_win": avg_win,
             "avg_loss": avg_loss,
             "profit_factor": profit_factor,
-            "best_trade": float(max((pos.pnl or 0) for pos in closed_positions) if closed_positions else 0.0),
-            "worst_trade": float(min((pos.pnl or 0) for pos in closed_positions) if closed_positions else 0.0),
+            "best_trade": float(
+                max((pos.pnl or 0) for pos in closed_positions)
+                if closed_positions
+                else 0.0
+            ),
+            "worst_trade": float(
+                min((pos.pnl or 0) for pos in closed_positions)
+                if closed_positions
+                else 0.0
+            ),
             "recent_trades": len(recent_positions),
             "recent_pnl": recent_pnl,
             "open_positions_count": len(open_positions),
@@ -77,7 +95,9 @@ class PortfolioService(BaseService):
             ],
         }
 
-    async def get_performance_metrics(self, user_id: int, days: int = 30) -> Dict[str, Any]:
+    async def get_performance_metrics(
+        self, user_id: int, days: int = 30
+    ) -> dict[str, Any]:
         """Get performance metrics for a specific period."""
         self.log_operation("get_performance_metrics", user_id, days=days)
 
@@ -86,7 +106,8 @@ class PortfolioService(BaseService):
         recent_closed = [
             pos
             for pos in positions
-            if pos.status == "CLOSED" and (pos.closed_at or pos.opened_at or datetime.utcnow()) >= cutoff_date
+            if pos.status == "CLOSED"
+            and (pos.closed_at or pos.opened_at or datetime.utcnow()) >= cutoff_date
         ]
 
         if not recent_closed:
@@ -110,7 +131,9 @@ class PortfolioService(BaseService):
 
         if len(pnl_values) > 1:
             mean_return = total_pnl / len(pnl_values)
-            variance = sum((p - mean_return) ** 2 for p in pnl_values) / (len(pnl_values) - 1)
+            variance = sum((p - mean_return) ** 2 for p in pnl_values) / (
+                len(pnl_values) - 1
+            )
             volatility = variance**0.5
         else:
             volatility = 0.0
@@ -126,12 +149,12 @@ class PortfolioService(BaseService):
             "worst_trade": min(pnl_values),
         }
 
-    async def get_asset_breakdown(self, user_id: int) -> Dict[str, Any]:
+    async def get_asset_breakdown(self, user_id: int) -> dict[str, Any]:
         """Get portfolio breakdown by asset."""
         self.log_operation("get_asset_breakdown", user_id)
 
         positions = await db.get_user_positions(user_id)
-        asset_stats: Dict[str, Dict[str, Any]] = {}
+        asset_stats: dict[str, dict[str, Any]] = {}
 
         for pos in positions:
             symbol = pos.symbol or "UNKNOWN"
@@ -158,6 +181,6 @@ class PortfolioService(BaseService):
 
         return asset_stats
 
-    def validate_input(self, data: Dict[str, Any]) -> bool:
+    def validate_input(self, data: dict[str, Any]) -> bool:
         """Validate portfolio input data."""
         return isinstance(data, dict) and isinstance(data.get("user_id"), int)

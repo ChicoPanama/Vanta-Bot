@@ -3,24 +3,25 @@ Clean Logging Configuration for Testing
 Simplified logging setup for CI/CD and testing environments
 """
 
-import logging
-import sys
 import os
-from typing import Any, Dict, Optional
+import sys
+from typing import Any
+
 from loguru import logger
 
 
 class CleanFormatter:
     """Clean formatter for testing environments"""
-    
+
     def __init__(self, service_name: str = "vanta-bot"):
         self.service_name = service_name
-    
-    def format(self, record: Dict[str, Any]) -> str:
+
+    def format(self, record: dict[str, Any]) -> str:
         """Format log record for clean output"""
         # Simple format for testing
         if os.getenv("LOG_JSON", "false").lower() == "true":
             import json
+
             log_entry = {
                 "timestamp": record["time"].isoformat(),
                 "level": record["level"].name,
@@ -38,22 +39,22 @@ class CleanFormatter:
 
 def setup_clean_logging(service_name: str = "vanta-bot", level: str = "INFO"):
     """Set up clean logging for testing"""
-    
+
     # Remove default handler
     logger.remove()
-    
+
     # Add console handler with clean formatter
     formatter = CleanFormatter(service_name)
-    
+
     logger.add(
         sys.stdout,
         format=formatter.format,
         level=level,
         colorize=True,
         backtrace=True,
-        diagnose=True
+        diagnose=True,
     )
-    
+
     # Add file handler for test logs
     if os.getenv("ENVIRONMENT") == "test":
         logger.add(
@@ -61,9 +62,9 @@ def setup_clean_logging(service_name: str = "vanta-bot", level: str = "INFO"):
             format=formatter.format,
             level=level,
             rotation="10 MB",
-            retention="7 days"
+            retention="7 days",
         )
-    
+
     return logger
 
 

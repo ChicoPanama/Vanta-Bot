@@ -1,16 +1,17 @@
 """ExecutionModeManager Redis convergence testing (in-memory stubbed)."""
 
-import pytest
-import asyncio
 import json
 import time
-from unittest.mock import patch, Mock
-from src.services.copy_trading.execution_mode import ExecutionModeManager, ExecutionMode
-from tests.fixtures.redis_stub import RedisStub, AsyncRedisStub
+from unittest.mock import patch
+
+import pytest
+
+from src.services.copy_trading.execution_mode import ExecutionMode, ExecutionModeManager
 
 
 class InMemoryRedis:
     """Minimal in-memory Redis stub for tests."""
+
     def __init__(self):
         self.store = {}
         self.expiry = {}
@@ -33,7 +34,9 @@ class InMemoryRedis:
         return val if isinstance(val, bytes) else str(val).encode()
 
     def set(self, key, value, ex=None):
-        self.store[key] = value if isinstance(value, (bytes, bytearray)) else str(value).encode()
+        self.store[key] = (
+            value if isinstance(value, (bytes, bytearray)) else str(value).encode()
+        )
         if ex is not None:
             self.expiry[key] = time.time() + ex
         return True
@@ -42,7 +45,7 @@ class InMemoryRedis:
         self.expiry[key] = time.time() + seconds
         return True
 
-    def info(self, section='memory'):
+    def info(self, section="memory"):
         total = sum(len(v) for v in self.store.values())
         return {"used_memory": total}
 
@@ -98,15 +101,17 @@ class TestExecutionModeRedisConvergence:
         execution_manager_a.refresh_from_redis()
         assert not execution_manager_a.is_emergency_stopped
 
-    def test_execution_context_consistency(self, execution_manager_a, execution_manager_b):
+    def test_execution_context_consistency(
+        self, execution_manager_a, execution_manager_b
+    ):
         execution_manager_a.set_mode(ExecutionMode.LIVE)
         execution_manager_a.set_emergency_stop(False)
         context_a = execution_manager_a.get_execution_context()
         execution_manager_b.refresh_from_redis()
         context_b = execution_manager_b.get_execution_context()
-        assert context_a['mode'] == context_b['mode']
-        assert context_a['emergency_stop'] == context_b['emergency_stop']
-        assert context_a['can_execute'] == context_b['can_execute']
+        assert context_a["mode"] == context_b["mode"]
+        assert context_a["emergency_stop"] == context_b["emergency_stop"]
+        assert context_a["can_execute"] == context_b["can_execute"]
 
     def test_health_metrics_consistency(self, execution_manager_a, execution_manager_b):
         execution_manager_a.set_mode(ExecutionMode.LIVE)
@@ -114,15 +119,16 @@ class TestExecutionModeRedisConvergence:
         metrics_a = execution_manager_a.get_health_metrics()
         execution_manager_b.refresh_from_redis()
         metrics_b = execution_manager_b.get_health_metrics()
-        assert metrics_a['execution_mode'] == metrics_b['execution_mode']
-        assert metrics_a['emergency_stop'] == metrics_b['emergency_stop']
-        assert metrics_a['can_execute'] == metrics_b['can_execute']
+        assert metrics_a["execution_mode"] == metrics_b["execution_mode"]
+        assert metrics_a["emergency_stop"] == metrics_b["emergency_stop"]
+        assert metrics_a["can_execute"] == metrics_b["can_execute"]
 
     def test_redis_connection_failure(self):
         class DummyError(Exception):
             pass
+
         manager = ExecutionModeManager(redis_client=None)
-        with patch.object(manager, '_load_from_redis') as mock_load:
+        with patch.object(manager, "_load_from_redis") as mock_load:
             mock_load.side_effect = DummyError("Redis unavailable")
             # Should not raise; manager handles errors gracefully
             manager.refresh_from_redis()
@@ -131,7 +137,8 @@ class TestExecutionModeRedisConvergence:
     def test_redis_timeout_handling(self, execution_manager_a):
         class DummyTimeout(Exception):
             pass
-        with patch.object(execution_manager_a, '_load_from_redis') as mock_load:
+
+        with patch.object(execution_manager_a, "_load_from_redis") as mock_load:
             mock_load.side_effect = DummyTimeout("Redis timeout")
             execution_manager_a.refresh_from_redis()
             # Should not raise
@@ -175,7 +182,7 @@ class TestExecutionModeRedisConvergence:
         assert data.get("emergency_stop") is True
 
     def test_redis_connection_recovery(self, execution_manager_a):
-        with patch.object(execution_manager_a, '_load_from_redis') as mock_load:
+        with patch.object(execution_manager_a, "_load_from_redis") as mock_load:
             mock_load.side_effect = Exception("Redis unavailable")
             execution_manager_a.refresh_from_redis()
             assert execution_manager_a.mode in (ExecutionMode.DRY, ExecutionMode.LIVE)
@@ -190,8 +197,8 @@ class TestExecutionModeRedisConvergence:
     def test_redis_memory_usage(self, execution_manager_a, redis_client):
         execution_manager_a.set_mode(ExecutionMode.LIVE)
         execution_manager_a.set_emergency_stop(True)
-        info = redis_client.info('memory')
-        used_memory = info['used_memory']
+        info = redis_client.info("memory")
+        used_memory = info["used_memory"]
         assert used_memory < 1024 * 1024
 
     def test_redis_expiration_handling(self, execution_manager_a, redis_client):

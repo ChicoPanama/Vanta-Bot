@@ -1,24 +1,26 @@
 """Key Vault Service for envelope encryption with per-wallet DEKs."""
 
 from __future__ import annotations
+
+import base64
+import logging
+import os
 from dataclasses import dataclass
-from typing import Protocol, Tuple
+from typing import Protocol
+
 from cryptography.fernet import Fernet
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM
-import base64
-import os
-import logging
 
 logger = logging.getLogger(__name__)
 
 
 class KeyVaultService(Protocol):
     """Protocol for key vault implementations."""
-    
-    def generate_wrapped_dek(self) -> Tuple[bytes, bytes]:
+
+    def generate_wrapped_dek(self) -> tuple[bytes, bytes]:
         """Returns (wrapped_dek, dek_plaintext). dek_plaintext is only returned in-memory."""
         ...
-    
+
     def unwrap_dek(self, wrapped_dek: bytes) -> bytes:
         """Returns dek_plaintext for runtime use."""
         ...
@@ -27,11 +29,11 @@ class KeyVaultService(Protocol):
 @dataclass
 class LocalFernetKeyVault:
     """DEV ONLY: Local key vault using Fernet for development/testing.
-    
+
     This is NOT used for encrypting private keys directly.
     Instead, it wraps per-wallet DEKs with a process key (rotatable).
     """
-    
+
     # DEV ONLY: env var can be rotated; used to wrap per-wallet DEKs
     wrapping_key_b64: str
 
@@ -39,7 +41,7 @@ class LocalFernetKeyVault:
         """Get Fernet instance for wrapping/unwrapping DEKs."""
         return Fernet(self.wrapping_key_b64.encode())
 
-    def generate_wrapped_dek(self) -> Tuple[bytes, bytes]:
+    def generate_wrapped_dek(self) -> tuple[bytes, bytes]:
         """Generate a new DEK and wrap it with the process key."""
         dek = os.urandom(32)  # 256-bit DEK
         # Use URL-safe base64 to make it Fernet compatible
@@ -60,16 +62,15 @@ class LocalFernetKeyVault:
 @dataclass
 class AwsKmsKeyVault:
     """Production key vault using AWS KMS for envelope encryption."""
-    
-    kms_key_id: str
-    kms_client: "boto3.client"  # type: ignore
 
-    def generate_wrapped_dek(self) -> Tuple[bytes, bytes]:
+    kms_key_id: str
+    kms_client: boto3.client  # type: ignore
+
+    def generate_wrapped_dek(self) -> tuple[bytes, bytes]:
         """Generate a new DEK wrapped by KMS."""
         try:
             resp = self.kms_client.generate_data_key(
-                KeyId=self.kms_key_id, 
-                KeySpec="AES_256"
+                KeyId=self.kms_key_id, KeySpec="AES_256"
             )
             return resp["CiphertextBlob"], resp["Plaintext"]
         except Exception as e:
@@ -80,8 +81,7 @@ class AwsKmsKeyVault:
         """Unwrap a DEK using KMS."""
         try:
             resp = self.kms_client.decrypt(
-                CiphertextBlob=wrapped_dek, 
-                KeyId=self.kms_key_id
+                CiphertextBlob=wrapped_dek, KeyId=self.kms_key_id
             )
             return resp["Plaintext"]
         except Exception as e:
@@ -91,7 +91,7 @@ class AwsKmsKeyVault:
 
 class WalletEncryption:
     """Handles encryption/decryption of wallet private keys using envelope encryption."""
-    
+
     def __init__(self, key_vault: KeyVaultService):
         self.key_vault = key_vault
 
@@ -120,7 +120,7 @@ class WalletEncryption:
             logger.error(f"Failed to decrypt private key: {e}")
             raise
 
-    def create_encrypted_wallet(self, private_key_hex: str) -> Tuple[bytes, bytes]:
+    def create_encrypted_wallet(self, private_key_hex: str) -> tuple[bytes, bytes]:
         """Create encrypted wallet with new DEK."""
         wrapped_dek, dek = self.key_vault.generate_wrapped_dek()
         encrypted_privkey = self.encrypt_private_key(private_key_hex, dek)

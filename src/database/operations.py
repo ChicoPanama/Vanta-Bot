@@ -4,7 +4,8 @@ from __future__ import annotations
 
 import logging
 import os
-from typing import Any, Awaitable, Callable, List, Optional
+from collections.abc import Awaitable
+from typing import Any, Callable
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
@@ -22,7 +23,7 @@ logger = logging.getLogger(__name__)
 class DatabaseManager:
     """Thin wrapper around SQLAlchemy async engine providing helpers."""
 
-    def __init__(self, database_url: Optional[str] = None) -> None:
+    def __init__(self, database_url: str | None = None) -> None:
         env_value = os.getenv("DATABASE_URL")
         fallback = "sqlite+aiosqlite:///vanta_bot.db"
 
@@ -38,10 +39,14 @@ class DatabaseManager:
         if url.startswith("sqlite:///") and "+aiosqlite" not in url:
             url = url.replace("sqlite:///", "sqlite+aiosqlite:///")
 
-        logger.debug("DatabaseManager initialised with %s backend", url.split(":", 1)[0])
+        logger.debug(
+            "DatabaseManager initialised with %s backend", url.split(":", 1)[0]
+        )
 
         self.engine = create_async_engine(url, pool_pre_ping=True, future=True)
-        self.session_factory = async_sessionmaker(bind=self.engine, expire_on_commit=False)
+        self.session_factory = async_sessionmaker(
+            bind=self.engine, expire_on_commit=False
+        )
 
     async def _run(
         self,
@@ -70,8 +75,8 @@ class DatabaseManager:
     # ------------------------------------------------------------------
     # Users
 
-    async def get_user(self, telegram_id: int) -> Optional[models.User]:
-        async def op(session: AsyncSession) -> Optional[models.User]:
+    async def get_user(self, telegram_id: int) -> models.User | None:
+        async def op(session: AsyncSession) -> models.User | None:
             result = await session.execute(
                 select(models.User).where(models.User.telegram_id == telegram_id)
             )
@@ -79,9 +84,11 @@ class DatabaseManager:
 
         return await self._run(op)
 
-    async def get_user_by_id(self, user_id: int) -> Optional[models.User]:
-        async def op(session: AsyncSession) -> Optional[models.User]:
-            result = await session.execute(select(models.User).where(models.User.id == user_id))
+    async def get_user_by_id(self, user_id: int) -> models.User | None:
+        async def op(session: AsyncSession) -> models.User | None:
+            result = await session.execute(
+                select(models.User).where(models.User.id == user_id)
+            )
             return result.scalars().first()
 
         return await self._run(op)
@@ -90,7 +97,7 @@ class DatabaseManager:
         self,
         *,
         telegram_id: int,
-        username: Optional[str],
+        username: str | None,
         wallet_address: str,
         encrypted_private_key: str,
     ) -> models.User:
@@ -119,7 +126,7 @@ class DatabaseManager:
         side: str,
         size: float,
         leverage: int,
-        entry_price: Optional[float] = None,
+        entry_price: float | None = None,
     ) -> models.Position:
         async def op(session: AsyncSession) -> models.Position:
             position = models.Position(
@@ -137,18 +144,22 @@ class DatabaseManager:
 
         return await self._run(op, commit=True)
 
-    async def get_user_positions(self, user_id: int, status: Optional[str] = None) -> List[models.Position]:
-        async def op(session: AsyncSession) -> List[models.Position]:
+    async def get_user_positions(
+        self, user_id: int, status: str | None = None
+    ) -> list[models.Position]:
+        async def op(session: AsyncSession) -> list[models.Position]:
             stmt = select(models.Position).where(models.Position.user_id == user_id)
             if status:
                 stmt = stmt.where(models.Position.status == status)
-            result = await session.execute(stmt.order_by(models.Position.opened_at.desc()))
+            result = await session.execute(
+                stmt.order_by(models.Position.opened_at.desc())
+            )
             return list(result.scalars().all())
 
         return await self._run(op)
 
-    async def get_position_by_id(self, position_id: int) -> Optional[models.Position]:
-        async def op(session: AsyncSession) -> Optional[models.Position]:
+    async def get_position_by_id(self, position_id: int) -> models.Position | None:
+        async def op(session: AsyncSession) -> models.Position | None:
             result = await session.execute(
                 select(models.Position).where(models.Position.id == position_id)
             )
@@ -156,8 +167,10 @@ class DatabaseManager:
 
         return await self._run(op)
 
-    async def update_position(self, position_id: int, **kwargs: Any) -> Optional[models.Position]:
-        async def op(session: AsyncSession) -> Optional[models.Position]:
+    async def update_position(
+        self, position_id: int, **kwargs: Any
+    ) -> models.Position | None:
+        async def op(session: AsyncSession) -> models.Position | None:
             position = await session.get(models.Position, position_id)
             if not position:
                 return None
@@ -169,11 +182,16 @@ class DatabaseManager:
 
         return await self._run(op, commit=True)
 
-    async def list_recent_closed_positions(self, user_id: int, limit: int = 10) -> List[models.Position]:
-        async def op(session: AsyncSession) -> List[models.Position]:
+    async def list_recent_closed_positions(
+        self, user_id: int, limit: int = 10
+    ) -> list[models.Position]:
+        async def op(session: AsyncSession) -> list[models.Position]:
             stmt = (
                 select(models.Position)
-                .where(models.Position.user_id == user_id, models.Position.status == "CLOSED")
+                .where(
+                    models.Position.user_id == user_id,
+                    models.Position.status == "CLOSED",
+                )
                 .order_by(models.Position.closed_at.desc())
                 .limit(limit)
             )
@@ -182,8 +200,8 @@ class DatabaseManager:
 
         return await self._run(op)
 
-    async def list_open_positions(self) -> List[models.Position]:
-        async def op(session: AsyncSession) -> List[models.Position]:
+    async def list_open_positions(self) -> list[models.Position]:
+        async def op(session: AsyncSession) -> list[models.Position]:
             result = await session.execute(
                 select(models.Position).where(models.Position.status == "OPEN")
             )
@@ -194,8 +212,8 @@ class DatabaseManager:
     # ------------------------------------------------------------------
     # Orders
 
-    async def list_pending_orders(self, user_id: int) -> List[models.Order]:
-        async def op(session: AsyncSession) -> List[models.Order]:
+    async def list_pending_orders(self, user_id: int) -> list[models.Order]:
+        async def op(session: AsyncSession) -> list[models.Order]:
             result = await session.execute(
                 select(models.Order).where(
                     models.Order.user_id == user_id,
@@ -215,7 +233,7 @@ class DatabaseManager:
         side: str,
         size: float,
         leverage: int,
-        price: Optional[float] = None,
+        price: float | None = None,
     ) -> models.Order:
         async def op(session: AsyncSession) -> models.Order:
             order = models.Order(
@@ -243,7 +261,7 @@ class DatabaseManager:
         user_id: int,
         tx_hash: str,
         tx_type: str,
-        amount: Optional[float] = None,
+        amount: float | None = None,
         status: str = "PENDING",
     ) -> models.Transaction:
         async def op(session: AsyncSession) -> models.Transaction:

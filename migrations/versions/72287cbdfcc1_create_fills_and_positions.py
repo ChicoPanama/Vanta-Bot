@@ -5,13 +5,13 @@ Revises: 001
 Create Date: 2025-09-26 21:42:33.316249
 
 """
-from alembic import op
-import sqlalchemy as sa
 
+import sqlalchemy as sa
+from alembic import op
 
 # revision identifiers, used by Alembic.
-revision = '72287cbdfcc1'
-down_revision = '001'
+revision = "72287cbdfcc1"
+down_revision = "001"
 branch_labels = None
 depends_on = None
 
@@ -33,7 +33,9 @@ def upgrade():
         sa.Column("block_hash", sa.String(66), nullable=True),
         sa.Column("tx_hash", sa.String(66), index=True, nullable=False),
         sa.Column("ts", sa.BigInteger, index=True, nullable=False),
-        sa.UniqueConstraint("tx_hash", "address", "pair", "side", name="uq_fill_dedupe"),
+        sa.UniqueConstraint(
+            "tx_hash", "address", "pair", "side", name="uq_fill_dedupe"
+        ),
     )
 
     op.create_table(
@@ -46,12 +48,16 @@ def upgrade():
         sa.Column("size", sa.Numeric(38, 18), nullable=False),
         sa.Column("opened_at", sa.BigInteger, index=True, nullable=False),
         sa.Column("closed_at", sa.BigInteger, index=True, nullable=True),
-        sa.Column("pnl_realized", sa.Numeric(38, 18), nullable=False, server_default="0"),
+        sa.Column(
+            "pnl_realized", sa.Numeric(38, 18), nullable=False, server_default="0"
+        ),
         sa.Column("fees", sa.Numeric(38, 18), nullable=False, server_default="0"),
         sa.Column("funding", sa.Numeric(38, 18), nullable=False, server_default="0"),
         sa.Column("tx_open", sa.String(66), nullable=False),
         sa.Column("tx_close", sa.String(66), nullable=True),
-        sa.UniqueConstraint("address", "pair", "is_long", "opened_at", name="uq_position_identity"),
+        sa.UniqueConstraint(
+            "address", "pair", "is_long", "opened_at", name="uq_position_identity"
+        ),
     )
 
 

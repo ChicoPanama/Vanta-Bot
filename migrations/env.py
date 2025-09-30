@@ -2,16 +2,16 @@
 import os
 import sys
 from logging.config import fileConfig
-from sqlalchemy import engine_from_config
-from sqlalchemy import pool
+
 from alembic import context
+from sqlalchemy import engine_from_config, pool
 
 # Add the project root to the Python path
 sys.path.append(os.path.dirname(os.path.dirname(__file__)))
 
 # Import your models
-from src.database.models import Base
 from src.config.settings import settings
+from src.database.models import Base
 
 # this is the Alembic Config object, which provides
 # access to the values within the .ini file in use.
@@ -31,9 +31,15 @@ target_metadata = Base.metadata
 # my_important_option = config.get_main_option("my_important_option")
 # ... etc.
 
+
 def get_url():
     """Get database URL from environment or config"""
-    return settings.DATABASE_URL if hasattr(settings, 'DATABASE_URL') and settings.DATABASE_URL else "sqlite:///vanta_bot.db"
+    return (
+        settings.DATABASE_URL
+        if hasattr(settings, "DATABASE_URL") and settings.DATABASE_URL
+        else "sqlite:///vanta_bot.db"
+    )
+
 
 def run_migrations_offline() -> None:
     """Run migrations in 'offline' mode.
@@ -68,8 +74,8 @@ def run_migrations_online() -> None:
     """
     # Override the sqlalchemy.url in alembic.ini with our config
     configuration = config_alembic.get_section(config_alembic.config_ini_section)
-    configuration['sqlalchemy.url'] = get_url()
-    
+    configuration["sqlalchemy.url"] = get_url()
+
     connectable = engine_from_config(
         configuration,
         prefix="sqlalchemy.",
@@ -77,9 +83,7 @@ def run_migrations_online() -> None:
     )
 
     with connectable.connect() as connection:
-        context.configure(
-            connection=connection, target_metadata=target_metadata
-        )
+        context.configure(connection=connection, target_metadata=target_metadata)
 
         with context.begin_transaction():
             context.run_migrations()

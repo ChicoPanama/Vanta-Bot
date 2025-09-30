@@ -1,12 +1,13 @@
 from __future__ import annotations
-from decimal import Decimal
-from typing import Optional
-from telegram import Update
-from telegram.ext import CommandHandler, CallbackQueryHandler, ContextTypes
 
-from src.services.risk.risk_calculator import calculator
+from decimal import Decimal
+
+from telegram import Update
+from telegram.ext import CallbackQueryHandler, CommandHandler, ContextTypes
+
+from src.bot.ui.formatting import fmt_usd
 from src.bot.ui.keyboards import kb
-from src.bot.ui.formatting import fmt_usd, fmt_px
+from src.services.risk.risk_calculator import calculator
 
 # Fallback if you don't have a portfolio service yet.
 DEFAULT_BAL = Decimal("10000")  # Labeled clearly as a placeholder
@@ -17,16 +18,20 @@ def _render_analysis(a: dict) -> str:
     bal = a.get("account_balance_usd")
     mar = a.get("margin_required_usd")
     liq = a.get("liq_distance_pct")
-    q   = a.get("quality", {})
-    sc  = a.get("scenarios", {})
+    q = a.get("quality", {})
+    sc = a.get("scenarios", {})
 
-    def _pct(s): 
-        try: return f"{Decimal(s) * 100:.2f}%"
-        except: return str(s)
+    def _pct(s):
+        try:
+            return f"{Decimal(s) * 100:.2f}%"
+        except:
+            return str(s)
 
     def _usd(s):
-        try: return fmt_usd(Decimal(s))
-        except: return str(s)
+        try:
+            return fmt_usd(Decimal(s))
+        except:
+            return str(s)
 
     lines = [
         "*Risk Analysis* (educational — does not block trades)",
@@ -35,8 +40,8 @@ def _render_analysis(a: dict) -> str:
         f"Margin required: {_usd(mar)}",
         f"Approx. distance to liquidation: {_pct(liq)}",
         "",
-        f"Quality: {q.get('rating','—')} ({q.get('score','—')}/100)",
-        f"{q.get('description','')}",
+        f"Quality: {q.get('rating', '—')} ({q.get('score', '—')}/100)",
+        f"{q.get('description', '')}",
         "",
         "*Impact Scenarios* (move → est. loss / account impact):",
     ]
@@ -50,7 +55,9 @@ def _render_analysis(a: dict) -> str:
     ]
     for label, key in pretty:
         row = sc.get(key, {})
-        lines.append(f"• {label} → {_usd(row.get('loss_usd'))} / {_pct(row.get('account_impact_pct'))}")
+        lines.append(
+            f"• {label} → {_usd(row.get('loss_usd'))} / {_pct(row.get('account_impact_pct'))}"
+        )
 
     lines.append("")
     lines.append("_All numbers are approximate for education._")
@@ -65,13 +72,13 @@ async def cmd_analyze(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if len(args) < 3:
         await update.effective_chat.send_message(
             "Usage: `/analyze <PAIR> <SIZE_USD> <LEV>`\nExample: `/analyze ETH/USD 1000 25`",
-            parse_mode="Markdown"
+            parse_mode="Markdown",
         )
         return
 
     pair = args[0].upper()
     size = Decimal(args[1])
-    lev  = Decimal(args[2])
+    lev = Decimal(args[2])
 
     # TODO: plug your portfolio balance here when available
     bal = DEFAULT_BAL
@@ -88,12 +95,12 @@ async def cmd_calc(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if len(args) < 2:
         await update.effective_chat.send_message(
             "Usage: `/calc <PAIR> <LEV> [risk_pct]`\nExample: `/calc ETH/USD 25 3`",
-            parse_mode="Markdown"
+            parse_mode="Markdown",
         )
         return
 
     pair = args[0].upper()
-    lev  = Decimal(args[1])
+    lev = Decimal(args[1])
     bal = DEFAULT_BAL
 
     if len(args) > 2:
@@ -130,11 +137,16 @@ async def cb_view_risk(update: Update, context: ContextTypes.DEFAULT_TYPE):
     # Balance unknown → use labeled assumption; swap in real wallet when available
     bal = DEFAULT_BAL
     a = calculator.analyze(Decimal(size_str), Decimal(lev_str), bal, pair)
-    await q.edit_message_text(_render_analysis(a), parse_mode="Markdown",
-                              reply_markup=kb([[("⬅️ Back to Quote", "nav:back_to_quote")]]))
+    await q.edit_message_text(
+        _render_analysis(a),
+        parse_mode="Markdown",
+        reply_markup=kb([[("⬅️ Back to Quote", "nav:back_to_quote")]]),
+    )
 
 
 def register(app):
     app.add_handler(CommandHandler("analyze", cmd_analyze))
     app.add_handler(CommandHandler("calc", cmd_calc))
-    app.add_handler(CallbackQueryHandler(cb_view_risk, pattern=r"^qt:viewrisk:.+:.+:.+$"))
+    app.add_handler(
+        CallbackQueryHandler(cb_view_risk, pattern=r"^qt:viewrisk:.+:.+:.+$")
+    )

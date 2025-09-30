@@ -1,12 +1,15 @@
 from __future__ import annotations
-from dataclasses import dataclass, field
+
 import os
+from dataclasses import dataclass, field
+
 
 def _get(name: str, default: str | None = None, required: bool = False) -> str | None:
     val = os.getenv(name, default)
     if required and (val is None or val == ""):
         raise RuntimeError(f"Missing required env: {name}")
     return val
+
 
 @dataclass
 class Settings:
@@ -19,7 +22,9 @@ class Settings:
     telegram_bot_token: str | None = _get("TELEGRAM_BOT_TOKEN")
 
     # Avantis / contracts
-    usdc_contract: str = _get("USDC_CONTRACT", "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913")
+    usdc_contract: str = _get(
+        "USDC_CONTRACT", "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913"
+    )
     trading_contract: str | None = _get("AVANTIS_TRADING_CONTRACT")
     vault_contract: str | None = _get("AVANTIS_VAULT_CONTRACT")
 
@@ -29,10 +34,16 @@ class Settings:
     pyth_ws_url: str | None = _get("PYTH_WS_URL")
 
     # Admins & logging
-    admins: set[int] = field(default_factory=lambda: set(map(int, filter(None, (_get("ADMINS","") or "").split(",")))))
+    admins: set[int] = field(
+        default_factory=lambda: set(
+            map(int, filter(None, (_get("ADMINS", "") or "").split(",")))
+        )
+    )
     log_json: bool = (_get("LOG_JSON", "false") or "false").lower() == "true"
 
+
 settings = Settings()
+
 
 def runtime_summary() -> str:
     return (

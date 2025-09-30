@@ -9,10 +9,10 @@ try:  # pragma: no cover - optional dependency for local runs
 except ModuleNotFoundError:  # pragma: no cover
     pytest.skip("SQLAlchemy not installed", allow_module_level=True)
 
-from src.database.operations import DatabaseManager
-from src.services.analytics.insights_service import InsightsService
 import src.database.operations as db_module
 import src.services.analytics.insights_service as insights_module
+from src.database.operations import DatabaseManager
+from src.services.analytics.insights_service import InsightsService
 
 
 @pytest.fixture()

@@ -5,9 +5,9 @@ Clean Avantis Proxy Check
 This script checks both proxy addresses to determine which is the current active one.
 """
 
-from web3 import Web3
 import json
-from datetime import datetime, timezone
+
+from web3 import Web3
 
 RPC = "https://mainnet.base.org"
 w3 = Web3(Web3.HTTPProvider(RPC))
@@ -18,7 +18,10 @@ CANDIDATES = [
 ]
 
 # EIP-1967 storage slots
-IMPL_SLOT = Web3.keccak(text="eip1967.proxy.implementation")[:-1] + bytes([int.from_bytes(Web3.keccak(text="eip1967.proxy.implementation")[-1:], 'big') - 1])
+IMPL_SLOT = Web3.keccak(text="eip1967.proxy.implementation")[:-1] + bytes(
+    [int.from_bytes(Web3.keccak(text="eip1967.proxy.implementation")[-1:], "big") - 1]
+)
+
 
 def read_slot(addr, slot):
     try:
@@ -27,6 +30,7 @@ def read_slot(addr, slot):
     except:
         return None
 
+
 def check_paused_with_abi(addr, abi_json):
     try:
         c = w3.eth.contract(address=addr, abi=abi_json)
@@ -34,14 +38,16 @@ def check_paused_with_abi(addr, abi_json):
     except:
         return None
 
+
 def check_has_openTrade(abi_json):
     for item in abi_json:
-        if item.get('type') == 'function' and item.get('name') == 'openTrade':
-            return True, item.get('inputs', [])
+        if item.get("type") == "function" and item.get("name") == "openTrade":
+            return True, item.get("inputs", [])
     return False, []
 
+
 print("🔍 AVANTIS PROXY ANALYSIS")
-print("="*50)
+print("=" * 50)
 
 # Load our existing ABI
 try:
@@ -50,7 +56,9 @@ try:
     has_openTrade, openTrade_inputs = check_has_openTrade(TRADING_ABI)
     print(f"✅ Loaded Trading ABI with openTrade function: {has_openTrade}")
     if has_openTrade:
-        print(f"   openTrade inputs: {[inp.get('name', 'unknown') for inp in openTrade_inputs]}")
+        print(
+            f"   openTrade inputs: {[inp.get('name', 'unknown') for inp in openTrade_inputs]}"
+        )
 except Exception as e:
     print(f"❌ Failed to load ABI: {e}")
     TRADING_ABI = None
@@ -59,15 +67,15 @@ print()
 
 for i, proxy in enumerate(CANDIDATES, 1):
     print(f"=== PROXY {i}: {proxy} ===")
-    
+
     # Check if it's a proxy
     impl = read_slot(proxy, IMPL_SLOT)
     if impl:
         print(f"✅ EIP-1967 Proxy - Implementation: {impl}")
     else:
-        print(f"❌ Not an EIP-1967 proxy or unreadable")
+        print("❌ Not an EIP-1967 proxy or unreadable")
         continue
-    
+
     # Check pause status
     if TRADING_ABI:
         paused = check_paused_with_abi(proxy, TRADING_ABI)
@@ -75,10 +83,10 @@ for i, proxy in enumerate(CANDIDATES, 1):
             status = "PAUSED" if paused else "ACTIVE"
             print(f"📊 Status: {status}")
         else:
-            print(f"❓ Cannot determine pause status")
+            print("❓ Cannot determine pause status")
     else:
-        print(f"❓ No ABI available for pause check")
-    
+        print("❓ No ABI available for pause check")
+
     # Get recent transaction count (activity indicator)
     try:
         latest_block = w3.eth.block_number
@@ -92,11 +100,11 @@ for i, proxy in enumerate(CANDIDATES, 1):
                         tx_count += 1
             except:
                 continue
-        
+
         print(f"📈 Recent activity (last 1000 blocks): {tx_count} transactions")
     except Exception as e:
         print(f"❓ Cannot check activity: {e}")
-    
+
     print()
 
 print("🎯 ANALYSIS SUMMARY:")

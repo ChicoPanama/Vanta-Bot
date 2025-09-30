@@ -4,17 +4,19 @@ import json
 import os
 import re
 import sys
-from typing import Optional, Tuple
+from typing import Optional
 
-PHASE_STATE_PATH = os.path.join(os.path.dirname(os.path.dirname(__file__)), "PHASE_STATE.md")
+PHASE_STATE_PATH = os.path.join(
+    os.path.dirname(os.path.dirname(__file__)), "PHASE_STATE.md"
+)
 
 
 def read_file_text(path: str) -> str:
-    with open(path, "r", encoding="utf-8") as f:
+    with open(path, encoding="utf-8") as f:
         return f.read()
 
 
-def parse_phase_state(text: str) -> Tuple[int, str]:
+def parse_phase_state(text: str) -> tuple[int, str]:
     current_phase = None
     status = None
     for line in text.splitlines():
@@ -36,13 +38,15 @@ def load_github_event() -> Optional[dict]:
     if not event_path or not os.path.exists(event_path):
         return None
     try:
-        with open(event_path, "r", encoding="utf-8") as f:
+        with open(event_path, encoding="utf-8") as f:
             return json.load(f)
     except Exception:
         return None
 
 
-def extract_pr_metadata(event: Optional[dict]) -> Tuple[Optional[int], list, Optional[str]]:
+def extract_pr_metadata(
+    event: Optional[dict],
+) -> tuple[Optional[int], list, Optional[str]]:
     if not event or "pull_request" not in event:
         return None, [], None
     pr = event["pull_request"]
@@ -104,7 +108,9 @@ def check_pr_policy(strict: bool = False) -> None:
         os.path.join(os.path.dirname(PHASE_STATE_PATH), "PHASES_BREAKDOWN.md"),
         os.path.join(os.path.dirname(PHASE_STATE_PATH), "DEPENDENCIES.md"),
         os.path.join(os.path.dirname(PHASE_STATE_PATH), "DELIVERY_PLAN.md"),
-        os.path.join(os.path.dirname(PHASE_STATE_PATH), ".github", "PULL_REQUEST_TEMPLATE.md"),
+        os.path.join(
+            os.path.dirname(PHASE_STATE_PATH), ".github", "PULL_REQUEST_TEMPLATE.md"
+        ),
     ]
     missing = [p for p in required_files if not os.path.exists(p)]
     if missing:
@@ -138,9 +144,15 @@ def check_pr_policy(strict: bool = False) -> None:
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Verify release readiness and phase gates")
-    parser.add_argument("--phase-gate", action="store_true", help="Only run phase gate checks")
-    parser.add_argument("--strict", action="store_true", help="Fail missing PR sections")
+    parser = argparse.ArgumentParser(
+        description="Verify release readiness and phase gates"
+    )
+    parser.add_argument(
+        "--phase-gate", action="store_true", help="Only run phase gate checks"
+    )
+    parser.add_argument(
+        "--strict", action="store_true", help="Fail missing PR sections"
+    )
     args = parser.parse_args()
 
     if args.phase_gate:

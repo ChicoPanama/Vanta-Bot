@@ -1,7 +1,7 @@
 from __future__ import annotations
-from typing import List, Optional, Tuple
-from decimal import Decimal
+
 import logging
+from decimal import Decimal
 
 logger = logging.getLogger(__name__)
 
@@ -24,18 +24,18 @@ FALLBACK_PAIRS = [
 ]
 
 
-async def list_pairs(page: int = 0, page_size: int = 6) -> Tuple[List[str], int]:
+async def list_pairs(page: int = 0, page_size: int = 6) -> tuple[list[str], int]:
     """
     Returns a page of pairs and total_pages.
     Prefers SDK pairs cache; falls back to a static set if unavailable.
     """
-    pairs: List[str]
+    pairs: list[str]
     if callable(get_pairs_cache):
         try:
             pc = await get_pairs_cache()
             # Try attributes commonly used in Avantis SDK wrappers:
             # either objects with .symbol or mapping-like entries
-            symbols: List[str] = []
+            symbols: list[str] = []
             for p in pc:
                 sym = getattr(p, "symbol", None) or getattr(p, "pair", None) or str(p)
                 symbols.append(str(sym))
@@ -54,12 +54,14 @@ async def list_pairs(page: int = 0, page_size: int = 6) -> Tuple[List[str], int]
     return pairs[start : start + page_size], total_pages
 
 
-async def get_last_price(pair: str) -> Optional[Decimal]:
+async def get_last_price(pair: str) -> Decimal | None:
     if callable(get_price_for_pair):
         try:
             px = await get_price_for_pair(pair)
             return Decimal(str(px)) if px is not None else None
         except Exception as e:  # noqa: BLE001
-            logger.warning("Error getting price for pair", extra={"pair": pair}, exc_info=e)
+            logger.warning(
+                "Error getting price for pair", extra={"pair": pair}, exc_info=e
+            )
             return None
     return None

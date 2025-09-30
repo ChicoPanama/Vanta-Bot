@@ -137,7 +137,7 @@ class TestStartHandler:
         """Test start handler initializes correctly"""
         # Test implementation
         pass
-    
+
     def test_start_handler_response(self):
         """Test start handler response format"""
         # Test implementation
@@ -196,3 +196,11 @@ Tests are designed to run in CI/CD pipelines:
 - Avoid hardcoded values
 - Use environment variables for configuration
 - Clean up test data after runs
+
+### Default test selection
+
+Default test runs include unit and integration tests. Adhoc E2E tests under `tests/e2e/adhoc` are excluded by default. Run them explicitly:
+
+```bash
+pytest tests/e2e/adhoc -q -m "not slow"
+```

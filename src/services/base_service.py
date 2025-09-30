@@ -1,7 +1,7 @@
 """Base service helpers shared by async service implementations."""
 
 from abc import ABC, abstractmethod
-from typing import Any, Dict, Optional
+from typing import Any, Optional
 
 from src.utils.logging import get_logger
 
@@ -15,11 +15,13 @@ class BaseService(ABC):
         self.logger = logger
 
     @abstractmethod
-    def validate_input(self, data: Dict[str, Any]) -> bool:
+    def validate_input(self, data: dict[str, Any]) -> bool:
         """Validate input data for the service."""
         raise NotImplementedError
 
-    def log_operation(self, operation: str, user_id: Optional[int] = None, **kwargs: Any) -> None:
+    def log_operation(
+        self, operation: str, user_id: Optional[int] = None, **kwargs: Any
+    ) -> None:
         """Log service operation with structured metadata."""
         log_data = {
             "operation": operation,

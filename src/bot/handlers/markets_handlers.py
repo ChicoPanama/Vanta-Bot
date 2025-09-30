@@ -1,14 +1,15 @@
 from __future__ import annotations
+
 from decimal import Decimal
-from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
-from telegram.ext import CommandHandler, CallbackQueryHandler, ContextTypes
 
-from src.services.markets.markets_provider import list_pairs, get_last_price
-from src.bot.ui.keyboards import kb, chunk_buttons
+from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
+from telegram.ext import CallbackQueryHandler, CommandHandler, ContextTypes
+
 from src.bot.ui.formatting import fmt_px, fmt_usd
-from src.services.trading.trade_drafts import draft_store, TradeDraft
+from src.bot.ui.keyboards import chunk_buttons, kb
+from src.services.markets.markets_provider import get_last_price, list_pairs
+from src.services.trading.trade_drafts import TradeDraft, draft_store
 from src.services.users.user_prefs import prefs_store
-
 
 PAGE_SIZE = 6
 LEV_CHIPS = [5, 10, 25, 50, 100]
@@ -19,7 +20,9 @@ def _page_kb(pairs, page, total_pages, default_pair=None) -> InlineKeyboardMarku
     pair_buttons = []
     for p in pairs:
         if p == default_pair:
-            pair_buttons.append(InlineKeyboardButton(f"⭐ {p}", callback_data=f"pair:{p}"))
+            pair_buttons.append(
+                InlineKeyboardButton(f"⭐ {p}", callback_data=f"pair:{p}")
+            )
         else:
             pair_buttons.append(InlineKeyboardButton(p, callback_data=f"pair:{p}"))
     rows = chunk_buttons(pair_buttons, n=2)
@@ -37,17 +40,17 @@ def _page_kb(pairs, page, total_pages, default_pair=None) -> InlineKeyboardMarku
 
 async def cmd_markets(update: Update, context: ContextTypes.DEFAULT_TYPE):
     pairs, total = await list_pairs(page=0, page_size=PAGE_SIZE)
-    
+
     # Get user's default pair preference
     uid = update.effective_user.id
     p = prefs_store().get(uid)
     default_pair = p.get("default_pair")
-    
+
     # Add default pair shortcut if it exists and is available
     if default_pair and default_pair in pairs:
         pairs.remove(default_pair)
         pairs.insert(0, default_pair)
-    
+
     await update.effective_chat.send_message(
         "Select a market:", reply_markup=_page_kb(pairs, 0, total, default_pair)
     )
@@ -59,19 +62,20 @@ async def cb_markets_pagination(update: Update, context: ContextTypes.DEFAULT_TY
     _, _, page = q.data.split(":")
     page = int(page)
     pairs, total = await list_pairs(page=page, page_size=PAGE_SIZE)
-    
+
     # Get user's default pair preference
     uid = q.from_user.id
     p = prefs_store().get(uid)
     default_pair = p.get("default_pair")
-    
+
     # Add default pair shortcut if it exists and is available (only on first page)
     if page == 0 and default_pair and default_pair in pairs:
         pairs.remove(default_pair)
         pairs.insert(0, default_pair)
-    
+
     await q.edit_message_text(
-        "Select a market:", reply_markup=_page_kb(pairs, page, total, default_pair if page == 0 else None)
+        "Select a market:",
+        reply_markup=_page_kb(pairs, page, total, default_pair if page == 0 else None),
     )
 
 
@@ -95,7 +99,10 @@ async def cb_select_pair(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
 
     # side row
-    side_row = [("Long 🟢", f"qt:side:{pair}:LONG"), ("Short 🔴", f"qt:side:{pair}:SHORT")]
+    side_row = [
+        ("Long 🟢", f"qt:side:{pair}:LONG"),
+        ("Short 🔴", f"qt:side:{pair}:SHORT"),
+    ]
 
     # leverage row - use user preferences
     lev_btns = [(f"{x}×", f"qt:lev:{pair}:{x}") for x in user_lev_chips]
@@ -117,7 +124,9 @@ async def cb_select_pair(update: Update, context: ContextTypes.DEFAULT_TYPE):
         [InlineKeyboardButton("⬅️ Markets", callback_data="nav:markets")],
     ]
 
-    await q.edit_message_text(text, parse_mode="Markdown", reply_markup=InlineKeyboardMarkup(rows))
+    await q.edit_message_text(
+        text, parse_mode="Markdown", reply_markup=InlineKeyboardMarkup(rows)
+    )
 
 
 async def cb_nav(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -127,23 +136,29 @@ async def cb_nav(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     if dest == "markets":
         pairs, total = await list_pairs(page=0, page_size=PAGE_SIZE)
-        
+
         # Get user's default pair preference
         uid = q.from_user.id
         p = prefs_store().get(uid)
         default_pair = p.get("default_pair")
-        
+
         # Add default pair shortcut if it exists and is available
         if default_pair and default_pair in pairs:
             pairs.remove(default_pair)
             pairs.insert(0, default_pair)
-        
-        await q.edit_message_text("Select a market:", reply_markup=_page_kb(pairs, 0, total, default_pair))
+
+        await q.edit_message_text(
+            "Select a market:", reply_markup=_page_kb(pairs, 0, total, default_pair)
+        )
     elif dest == "quick":
-        await q.edit_message_text("Pick a market via /markets, then use the Quick Trade buttons.")
+        await q.edit_message_text(
+            "Pick a market via /markets, then use the Quick Trade buttons."
+        )
     elif dest == "positions":
         # Phase 4 will implement a full positions view; placeholder for now:
-        await q.edit_message_text("Your positions will appear here (Phase 4). Use /positions if available.")
+        await q.edit_message_text(
+            "Your positions will appear here (Phase 4). Use /positions if available."
+        )
 
 
 async def cb_qt_side(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -176,7 +191,9 @@ async def cb_qt_coll(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await show_draft_card(update, context, pair)
 
 
-async def show_draft_card(update: Update, context: ContextTypes.DEFAULT_TYPE, pair: str):
+async def show_draft_card(
+    update: Update, context: ContextTypes.DEFAULT_TYPE, pair: str
+):
     q = update.callback_query
     d = draft_store.get(q.from_user.id)
 
@@ -205,7 +222,9 @@ async def cb_qt_reset(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await q.answer()
     _, _, pair = q.data.split(":")
     draft_store.clear(q.from_user.id)
-    await q.edit_message_text("Draft cleared.", reply_markup=kb([[("⬅️ Back to Pair", f"pair:{pair}")]]))
+    await q.edit_message_text(
+        "Draft cleared.", reply_markup=kb([[("⬅️ Back to Pair", f"pair:{pair}")]])
+    )
 
 
 def register(app):
