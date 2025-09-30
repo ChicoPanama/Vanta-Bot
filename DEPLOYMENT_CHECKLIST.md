@@ -6,7 +6,20 @@
 
 ---
 
-## 📋 PHASE 0: PRE-FLIGHT (Sep 30, 2025) ✅
+## 📋 PHASE 0: PRE-FLIGHT (Sep 30, 2025) ⚠️ SECURITY REVIEW REQUIRED
+
+### ⚠️ SECURITY AUDIT FINDINGS - DEPLOYMENT BLOCKED
+**Status:** 🚨 **CRITICAL SECURITY FIXES PENDING REVIEW**
+
+**ALL DEPLOYMENT BLOCKED** until security fixes reviewed and validated:
+- [ ] ⚠️ Review SECURITY_AUDIT_FIXES.md
+- [ ] ⚠️ Validate SEC-001: Idempotency fix tested in staging
+- [ ] ⚠️ Validate SEC-002: Mock prices blocked (ENVIRONMENT=production)
+- [ ] ⚠️ Validate SEC-003: Private key rotated and purged from git history
+- [ ] ⚠️ Validate SEC-004: Leverage limits enforced
+- [ ] ⚠️ Validate SEC-005: Correct signer factory used
+
+**See:** `SECURITY_AUDIT_FIXES.md` for complete details
 
 ### Code Freeze & Tagging
 - [x] ✅ All critical fixes merged to main
@@ -14,10 +27,15 @@
   - [x] BOT-202: Idempotency validated (already working)
   - [x] BOT-203: Signal rules tests fixed
   - [x] BOT-204: Risk validation test fixed
+  - [x] SEC-001: Deterministic idempotency keys (CRITICAL FIX)
+  - [x] SEC-002: Mock price guards (CRITICAL FIX)
+  - [x] SEC-003: Hardcoded key removed (CRITICAL FIX)
+  - [x] SEC-004: Safe leverage fallback (MEDIUM FIX)
+  - [x] SEC-005: Single signer factory (MEDIUM FIX)
 - [x] ✅ Tag created: `v9.0.1-rc1`
 - [x] ✅ Tag pushed to GitHub
-- [x] ✅ Test pass rate: 83% (89/109)
-- [x] ✅ Production blockers: ZERO
+- [x] ✅ Test pass rate: 84% (97/109, +8 security tests)
+- [x] ⚠️ Production blockers: **5 SECURITY FIXES NEED VALIDATION**
 
 ### Configuration & Artifacts Created
 - [x] ✅ `config/env.prod.canary.template` - Canary configuration
