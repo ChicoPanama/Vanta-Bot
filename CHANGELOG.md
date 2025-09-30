@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added (Phase 2: Transaction Pipeline)
+- EIP-1559 transaction pipeline with type=2 transactions
+- Transaction models: `TxIntent`, `TxSend`, `TxReceipt` for full lifecycle tracking
+- Enhanced gas policy reading `baseFeePerGas` from latest block
+- Transaction orchestrator with idempotency keys and RBF retries
+- Replace-by-fee (RBF) support for stuck transactions
+- Transaction builder with gas estimation and EIP-1559 support
+- Nonce reconciliation helper (`make tx-reconcile`)
+- Comprehensive unit and integration tests (12 passing)
+
 ### Added (Phase 1: Secrets & Safety)
 - KMS-first signer with local dev fallback (`src/blockchain/signers/factory.py`)
 - Envelope encryption utilities (AES-GCM + KMS) in `src/security/crypto.py`

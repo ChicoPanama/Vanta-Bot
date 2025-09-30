@@ -240,3 +240,55 @@ class ApiCredential(Base):
     updated_at = Column(DateTime, onupdate=func.now(), nullable=True)
 
     __table_args__ = (Index("idx_api_creds_user_provider", "user_id", "provider"),)
+
+
+class TxIntent(Base):
+    """Transaction intent with idempotency key (Phase 2)."""
+
+    __tablename__ = "tx_intents"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    intent_key = Column(
+        String(128), unique=True, nullable=False, index=True
+    )  # e.g., "open:USER:UUID"
+    created_at = Column(DateTime, server_default=func.now(), nullable=False)
+    status = Column(
+        String(32), nullable=False, default="CREATED"
+    )  # CREATED|BUILT|SENT|MINED|FAILED|REPLACED
+    intent_metadata = Column(Text, nullable=True)  # JSON metadata (market, side, size)
+
+    __table_args__ = (Index("ix_txintent_status_created", "status", "created_at"),)
+
+
+class TxSend(Base):
+    """Transaction send record (Phase 2)."""
+
+    __tablename__ = "tx_sends"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    intent_id = Column(Integer, ForeignKey("tx_intents.id"), nullable=False, index=True)
+    chain_id = Column(Integer, nullable=False)
+    nonce = Column(Integer, nullable=False)
+    max_fee_per_gas = Column(BigInteger, nullable=False)
+    max_priority_fee_per_gas = Column(BigInteger, nullable=False)
+    gas_limit = Column(BigInteger, nullable=False)
+    raw_tx = Column(LargeBinary, nullable=True)  # Optional: can be large
+    tx_hash = Column(String(66), nullable=False, unique=True, index=True)
+    sent_at = Column(DateTime, server_default=func.now(), nullable=False)
+    replaced_by = Column(
+        String(66), nullable=True
+    )  # New tx hash if replaced via RBF
+
+
+class TxReceipt(Base):
+    """Transaction receipt (Phase 2)."""
+
+    __tablename__ = "tx_receipts"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    tx_hash = Column(String(66), nullable=False, unique=True, index=True)
+    status = Column(Integer, nullable=False)  # 1=success, 0=failed
+    block_number = Column(Integer, nullable=False)
+    gas_used = Column(BigInteger, nullable=False)
+    effective_gas_price = Column(BigInteger, nullable=False)
+    mined_at = Column(DateTime, server_default=func.now(), nullable=False)

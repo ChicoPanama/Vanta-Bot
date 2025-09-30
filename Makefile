@@ -92,3 +92,14 @@ setup: install migrate ## Complete setup for development
 
 rotate-deks: ## Rotate DEK encryption keys (Phase 1)
 	python scripts/rewrap_deks.py
+
+tx-reconcile: ## Reconcile nonce with on-chain state (Phase 2)
+	python -c "from web3 import Web3; \
+from src.config.settings import settings; \
+from src.database.session import SessionLocal; \
+from src.blockchain.tx.orchestrator import TxOrchestrator; \
+w3 = Web3(Web3.HTTPProvider(str(settings.BASE_RPC_URL))); \
+db = SessionLocal(); \
+orch = TxOrchestrator(w3, db); \
+print(f'Reconciled nonce: {orch.reconcile_nonce()}'); \
+db.close()"
