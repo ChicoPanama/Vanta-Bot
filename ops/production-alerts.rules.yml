@@ -1,0 +1,227 @@
+# Prometheus Alert Rules for Production Deployment
+# Install with: promtool check rules ops/production-alerts.rules.yml
+# Load in Prometheus: prometheus.yml -> rule_files: ["ops/production-alerts.rules.yml"]
+
+groups:
+  - name: vanta_critical_alerts
+    interval: 30s
+    rules:
+      # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+      # CRITICAL: Idempotency & Transaction Integrity (BOT-202)
+      # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+      - alert: DuplicateIntentsDetected
+        expr: sum(increase(vanta_intent_duplicate_total[5m])) > 0
+        for: 1m
+        labels:
+          severity: critical
+          component: orchestrator
+          ticket: BOT-202
+        annotations:
+          summary: "Duplicate transaction intents detected"
+          description: |
+            {{ $value }} duplicate intents in last 5 minutes.
+            This indicates idempotency key collision or logic failure.
+            Immediate investigation required.
+          runbook: "Check tx_intents table for duplicate idempotency_keys. Review intent_key generation logic."
+
+      - alert: IllegalStateTransitions
+        expr: increase(vanta_intent_illegal_transition_total[10m]) > 0
+        for: 1m
+        labels:
+          severity: critical
+          component: orchestrator
+          ticket: BOT-202
+        annotations:
+          summary: "Illegal transaction state transitions detected"
+          description: |
+            {{ $value }} illegal state transitions in last 10 minutes.
+            Transaction state machine violated.
+          runbook: "Review orchestrator logs for transition errors. Check TxIntent status column."
+
+      - alert: HighTransactionFailureRate
+        expr: |
+          (
+            rate(vanta_tx_submissions_failed[5m]) 
+            / 
+            rate(vanta_tx_submissions_total[5m])
+          ) > 0.005
+        for: 5m
+        labels:
+          severity: critical
+          component: orchestrator
+        annotations:
+          summary: "Transaction failure rate exceeds 0.5%"
+          description: |
+            {{ $value | humanizePercentage }} of transactions failing.
+            Check RPC connectivity, gas issues, or contract reverts.
+
+      # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+      # CRITICAL: Execution Mode Safety (BOT-201)
+      # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+      - alert: ExecutionModeFlapping
+        expr: increase(vanta_exec_mode_changes_total[10m]) > 2
+        for: 5m
+        labels:
+          severity: warning
+          component: execution_mode
+          ticket: BOT-201
+        annotations:
+          summary: "Execution mode flapping between DRY/LIVE"
+          description: |
+            Execution mode changed {{ $value }} times in 10 minutes.
+            Indicates Redis instability or circuit breaker issues.
+          runbook: |
+            1. Check Redis health
+            2. Review ExecutionModeManager logs
+            3. Verify 3-read health streak logic
+
+      - alert: RedisUnavailable
+        expr: up{job="redis"} == 0
+        for: 1m
+        labels:
+          severity: critical
+          component: redis
+          ticket: BOT-201
+        annotations:
+          summary: "Redis is down"
+          description: |
+            Redis unreachable. Bot should fail-safe to DRY mode.
+            Verify execution mode = DRY.
+
+      - alert: ExecutionModeStuckInLive
+        expr: |
+          vanta_exec_mode{mode="LIVE"} == 1
+          and
+          up{job="redis"} == 0
+        for: 2m
+        labels:
+          severity: critical
+          component: execution_mode
+          ticket: BOT-201
+        annotations:
+          summary: "CRITICAL: Bot still in LIVE mode despite Redis down"
+          description: |
+            Circuit breaker failure! Bot should be in DRY mode.
+            Manual intervention required immediately.
+          runbook: |
+            1. Check ExecutionModeManager circuit breaker logic
+            2. Force DRY mode: docker compose exec redis redis-cli SET vanta:exec_mode '{"mode":"DRY"}'
+            3. Restart bot services
+
+      # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+      # CRITICAL: Service Health
+      # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+      - alert: WebhookDown
+        expr: up{job="vanta-webhook"} == 0
+        for: 2m
+        labels:
+          severity: critical
+          component: webhook
+        annotations:
+          summary: "Webhook service is down"
+          description: "Signal ingestion halted. Check docker logs."
+
+      - alert: WorkerDown
+        expr: up{job="vanta-worker"} == 0
+        for: 2m
+        labels:
+          severity: critical
+          component: worker
+        annotations:
+          summary: "Worker service is down"
+          description: "Signal processing halted. Check docker logs."
+
+      - alert: MetricsEndpointDown
+        expr: up{job="vanta-metrics"} == 0
+        for: 1m
+        labels:
+          severity: critical
+          component: observability
+        annotations:
+          summary: "Metrics endpoint unreachable"
+          description: "Lost observability. Check /metrics endpoint and prometheus config."
+
+      # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+      # WARNING: Performance & Capacity
+      # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+      - alert: QueueBacklogHigh
+        expr: vanta_queue_depth > 100
+        for: 10m
+        labels:
+          severity: warning
+          component: worker
+        annotations:
+          summary: "Signal queue backlog exceeds 100"
+          description: |
+            {{ $value }} signals queued. Worker may be slow or stuck.
+            Check worker logs and processing rate.
+
+      - alert: HighMetricsLatency
+        expr: histogram_quantile(0.99, rate(vanta_http_request_duration_seconds_bucket{path="/metrics"}[5m])) > 0.5
+        for: 5m
+        labels:
+          severity: warning
+          component: observability
+        annotations:
+          summary: "P99 /metrics latency > 500ms"
+          description: "Metrics scrape slow. May impact Prometheus collection."
+
+      - alert: RBFAttemptsExceeded
+        expr: increase(vanta_rbf_attempt_total[30m]) > 50
+        for: 5m
+        labels:
+          severity: warning
+          component: orchestrator
+        annotations:
+          summary: "High number of RBF retry attempts"
+          description: |
+            {{ $value }} RBF attempts in 30 minutes.
+            Possible RPC issues or gas estimation problems.
+
+  - name: vanta_canary_specific
+    interval: 30s
+    rules:
+      # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+      # CANARY: Additional Safety for Initial Rollout
+      # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+      - alert: CanaryNotionalExceeded
+        expr: max(vanta_trade_notional_usd) > 10
+        for: 1m
+        labels:
+          severity: critical
+          component: canary
+        annotations:
+          summary: "Canary notional limit exceeded"
+          description: |
+            Trade size {{ $value }} USDC exceeds canary limit of $10.
+            Configuration error or limit bypass detected.
+
+      - alert: CanaryLeverageExceeded
+        expr: max(vanta_trade_leverage_x) > 2
+        for: 1m
+        labels:
+          severity: critical
+          component: canary
+        annotations:
+          summary: "Canary leverage limit exceeded"
+          description: |
+            Leverage {{ $value }}x exceeds canary limit of 2x.
+            Configuration error or limit bypass detected.
+
+      - alert: UnauthorizedSymbolTraded
+        expr: count(vanta_trade_symbol{symbol!~"BTC-USD|ETH-USD"}) > 0
+        for: 1m
+        labels:
+          severity: critical
+          component: canary
+        annotations:
+          summary: "Trade on unauthorized symbol during canary"
+          description: |
+            Only BTC-USD and ETH-USD allowed during canary.
+            Configuration error detected.
+
