@@ -7,6 +7,7 @@ from sqlalchemy import (
     Column,
     DateTime,
     Float,
+    ForeignKey,
     Index,
     Integer,
     LargeBinary,
@@ -16,6 +17,15 @@ from sqlalchemy import (
 )
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.sql import func
+
+# Import encrypted types (Phase 1)
+try:
+    from src.database.types import EncryptedBytes, EncryptedJSON, EncryptedString
+except ImportError:
+    # Fallback if types not yet created
+    EncryptedBytes = LargeBinary  # type: ignore
+    EncryptedJSON = LargeBinary  # type: ignore
+    EncryptedString = LargeBinary  # type: ignore
 
 Base = declarative_base()
 
@@ -49,6 +59,8 @@ class Wallet(Base):
     kms_key_id = Column(String(128), nullable=True)
     created_at = Column(DateTime, server_default=func.now(), nullable=False)
     rotated_at = Column(DateTime, nullable=True)
+    # Phase 1: New envelope-encrypted private key field
+    privkey_enc = Column(EncryptedBytes, nullable=True)
 
 
 class Position(Base):
@@ -212,3 +224,19 @@ class SentTransaction(Base):
     status = Column(
         String(16), default="PENDING", nullable=False
     )  # PENDING, CONFIRMED, FAILED
+
+
+class ApiCredential(Base):
+    """API credentials with envelope encryption (Phase 1)."""
+
+    __tablename__ = "api_credentials"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    user_id = Column(Integer, nullable=False, index=True)
+    provider = Column(String(64), nullable=False)  # e.g., "telegram", "exchange"
+    secret_enc = Column(EncryptedJSON, nullable=True)  # Encrypted API secret
+    meta_enc = Column(EncryptedJSON, nullable=True)  # Encrypted metadata
+    created_at = Column(DateTime, server_default=func.now(), nullable=False)
+    updated_at = Column(DateTime, onupdate=func.now(), nullable=True)
+
+    __table_args__ = (Index("idx_api_creds_user_provider", "user_id", "provider"),)

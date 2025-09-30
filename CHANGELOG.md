@@ -7,16 +7,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-### Added
+### Added (Phase 1: Secrets & Safety)
+- KMS-first signer with local dev fallback (`src/blockchain/signers/factory.py`)
+- Envelope encryption utilities (AES-GCM + KMS) in `src/security/crypto.py`
+- Encrypted SQLAlchemy types: `EncryptedBytes`, `EncryptedJSON`, `EncryptedString`
+- API credentials model with envelope encryption
+- Credentials repository API for encrypted secret storage
+- Startup validators for signer and encryption config
+- DEK rotation script (`scripts/rewrap_deks.py`) with `make rotate-deks`
+- Comprehensive unit and integration tests for crypto, signers, encrypted types
+
+### Added (Phase 0: Baseline Hygiene)
 - Clean package structure with `src/vantabot/` organization
 - Proper separation of production code and test/debug scripts
 - Comprehensive documentation structure
-- GitHub Actions CI/CD pipeline
+- GitHub Actions CI/CD pipeline with secret scanning
 - Pre-commit hooks for code quality
 - Type checking with MyPy
 - Code formatting with Ruff
 - Phase gate scaffolding: `PHASE_STATE.md`, planning docs, PR template
 - CI `phase_gate` and `verify_release` jobs; `scripts/verify_release.py`
+- Python 3.11 pinned across project
+- `.env.example` with placeholder configuration
 
 ### Changed
 - Moved all test scripts to `tests/` directory structure
@@ -28,6 +40,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Enhanced security documentation
 - Improved secret management guidelines
 - Added vulnerability reporting process
+- KMS-first signing (Phase 1: production-safe key management)
+- Envelope encryption for DB secrets (AES-GCM + KMS key wrapping)
+- Startup warnings for local signer usage
 
 ## [2.1.0] - 2024-01-XX
 

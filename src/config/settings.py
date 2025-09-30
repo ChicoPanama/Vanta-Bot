@@ -95,7 +95,9 @@ class Settings(BaseSettings):
     # Indexer / backfill configuration
     INDEXER_BACKFILL_RANGE: int = Field(50_000, env="INDEXER_BACKFILL_RANGE")
 
-    model_config = SettingsConfigDict(env_file=".env", case_sensitive=False)
+    model_config = SettingsConfigDict(
+        env_file=".env", case_sensitive=False, extra="ignore"
+    )
 
     # ------------------------------------------------------------------
     # Validators / helpers

@@ -89,3 +89,6 @@ ci: ## Run CI pipeline locally
 setup: install migrate ## Complete setup for development
 	@echo "✅ Development environment ready"
 	@echo "Run 'make dev' to start the bot"
+
+rotate-deks: ## Rotate DEK encryption keys (Phase 1)
+	python scripts/rewrap_deks.py
