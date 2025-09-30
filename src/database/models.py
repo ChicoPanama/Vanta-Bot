@@ -290,3 +290,58 @@ class TxReceipt(Base):
     gas_used = Column(BigInteger, nullable=False)
     effective_gas_price = Column(BigInteger, nullable=False)
     mined_at = Column(DateTime, server_default=func.now(), nullable=False)
+
+
+# ========== Phase 4: Persistence & Indexing ==========
+
+
+class SyncState(Base):
+    """Sync state for indexers (Phase 4)."""
+
+    __tablename__ = "sync_state"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    name = Column(String(64), unique=True, nullable=False)  # e.g., "avantis_indexer"
+    last_block = Column(Integer, default=0, nullable=False)
+    updated_at = Column(DateTime, default=func.now(), nullable=False)
+
+
+class IndexedFill(Base):
+    """Indexed trade fill/execution record (Phase 4)."""
+
+    __tablename__ = "indexed_fills"
+    __table_args__ = (
+        Index("ix_ifills_user_sym_block", "user_address", "symbol", "block_number"),
+    )
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    user_address = Column(String(42), index=True, nullable=False)
+    symbol = Column(String(32), index=True, nullable=False)  # "BTC-USD"
+    is_long = Column(Boolean, nullable=False)
+    usd_1e6 = Column(BigInteger, nullable=False)  # +open/-close notionals
+    collateral_usdc_1e6 = Column(BigInteger, default=0, nullable=False)
+    tx_hash = Column(String(66), index=True, nullable=False)
+    block_number = Column(Integer, index=True, nullable=False)
+    ts = Column(DateTime, default=func.now(), nullable=False)
+    meta = Column(Text, default="{}", nullable=False)  # JSON as TEXT for SQLite compat
+
+
+
+
+class UserPosition(Base):
+    """Aggregated user position state (Phase 4)."""
+
+    __tablename__ = "user_positions"
+
+    __table_args__ = (
+        Index("ix_user_pos_user_symbol", "user_address", "symbol", unique=True),
+    )
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    user_address = Column(String(42), index=True, nullable=False)
+    symbol = Column(String(32), index=True, nullable=False, default="BTC-USD")
+    is_long = Column(Boolean, nullable=False)
+    size_usd_1e6 = Column(BigInteger, default=0, nullable=False)  # signed notionals; 0 = flat
+    entry_collateral_1e6 = Column(BigInteger, default=0, nullable=False)
+    realized_pnl_1e6 = Column(BigInteger, default=0, nullable=False)
+    updated_at = Column(DateTime, default=func.now(), nullable=False)
