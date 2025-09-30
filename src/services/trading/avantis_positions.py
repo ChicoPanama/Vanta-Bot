@@ -298,7 +298,9 @@ class AvantisPositions:
             }
 
         except Exception as e:
-            logger.error(f"❌ Error getting portfolio summary for {trader_address}: {e}")
+            logger.error(
+                f"❌ Error getting portfolio summary for {trader_address}: {e}"
+            )
             return {
                 "trader_address": trader_address,
                 "error": str(e),

@@ -86,7 +86,9 @@ class VantaBotApp:
         try:
             await asyncio.Future()  # run until cancelled (KeyboardInterrupt)
         except asyncio.CancelledError:
-            self.logger.info("🔻 Shutdown signal received", extra={"trace_id": trace_id})
+            self.logger.info(
+                "🔻 Shutdown signal received", extra={"trace_id": trace_id}
+            )
         finally:
             stop_event.set()
             polling_task.cancel()

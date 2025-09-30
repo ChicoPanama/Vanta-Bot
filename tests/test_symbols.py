@@ -129,9 +129,9 @@ class TestSymbolNormalization:
         for ui_symbol in ui_symbols:
             canonical = to_canonical(ui_symbol)
             back_to_ui = to_ui_format(canonical)
-            assert (
-                back_to_ui == ui_symbol
-            ), f"Round trip failed: {ui_symbol} -> {canonical} -> {back_to_ui}"
+            assert back_to_ui == ui_symbol, (
+                f"Round trip failed: {ui_symbol} -> {canonical} -> {back_to_ui}"
+            )
 
     def test_no_symbol_flipping(self):
         """Test that canonical symbols don't flip to UI format."""
@@ -149,6 +149,6 @@ class TestSymbolNormalization:
         for symbol in canonical_symbols:
             result = to_canonical(symbol)
             assert result == symbol, f"Symbol {symbol} was flipped to {result}"
-            assert (
-                "/" not in result
-            ), f"Canonical symbol {symbol} contains '/' in result {result}"
+            assert "/" not in result, (
+                f"Canonical symbol {symbol} contains '/' in result {result}"
+            )

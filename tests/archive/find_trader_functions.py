@@ -120,7 +120,9 @@ async def find_trader_functions():
                         break
 
                 if open_trade_func:
-                    print(f"   📊 openTrade inputs: {open_trade_func.get('inputs', [])}")
+                    print(
+                        f"   📊 openTrade inputs: {open_trade_func.get('inputs', [])}"
+                    )
 
                     # Try to call it with proper parameters
                     # openTrade expects: (Trade memory trade, OrderType orderType, uint256 slippageP)

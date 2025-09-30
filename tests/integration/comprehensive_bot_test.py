@@ -108,7 +108,11 @@ class ComprehensiveBotTester:
         """Add a test result to the collection"""
         self.results.append(result)
         status_emoji = (
-            "✅" if result.status == "PASS" else "❌" if result.status == "FAIL" else "⚠️"
+            "✅"
+            if result.status == "PASS"
+            else "❌"
+            if result.status == "FAIL"
+            else "⚠️"
         )
         print(f"{status_emoji} {result.test_id}: {result.status}")
         if result.details:

@@ -37,6 +37,13 @@ class LocalPrivateKeySigner:
         """Get the signer's address."""
         return self._address
 
+    def sign_tx(self, tx: dict[str, Any]) -> bytes:
+        """Sign transaction and return raw bytes (Phase 1)."""
+        if "from" not in tx:
+            tx["from"] = self.address
+        signed_tx = self.account.sign_transaction(tx)
+        return signed_tx.rawTransaction
+
     async def sign_and_send(self, tx: dict[str, Any]) -> str:
         """Sign and send transaction."""
         try:

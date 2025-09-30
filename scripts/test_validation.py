@@ -115,9 +115,9 @@ def test_private_key_validation():
     print("Testing private key validation...")
 
     # Test valid key with 0x prefix
-    os.environ[
-        "TRADER_PRIVATE_KEY"
-    ] = "0x1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef"
+    os.environ["TRADER_PRIVATE_KEY"] = (
+        "0x1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef"
+    )
     try:
         validate_private_key()
         print("✅ Valid key with 0x prefix accepted")
@@ -126,9 +126,9 @@ def test_private_key_validation():
         return False
 
     # Test valid key without 0x prefix
-    os.environ[
-        "TRADER_PRIVATE_KEY"
-    ] = "1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef"
+    os.environ["TRADER_PRIVATE_KEY"] = (
+        "1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef"
+    )
     try:
         validate_private_key()
         print("✅ Valid key without 0x prefix accepted")

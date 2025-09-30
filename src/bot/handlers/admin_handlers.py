@@ -107,7 +107,9 @@ async def cmd_autocopy_on_user(update: Update, context: ContextTypes.DEFAULT_TYP
     try:
         target_user_id = int(args[0])
     except ValueError:
-        await update.effective_chat.send_message("❌ Invalid user ID. Must be a number.")
+        await update.effective_chat.send_message(
+            "❌ Invalid user ID. Must be a number."
+        )
         return
 
     affected_count = 0
@@ -147,7 +149,9 @@ async def cmd_autocopy_off_user(update: Update, context: ContextTypes.DEFAULT_TY
     try:
         target_user_id = int(args[0])
     except ValueError:
-        await update.effective_chat.send_message("❌ Invalid user ID. Must be a number.")
+        await update.effective_chat.send_message(
+            "❌ Invalid user ID. Must be a number."
+        )
         return
 
     affected_count = 0

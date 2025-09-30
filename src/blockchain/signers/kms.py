@@ -43,6 +43,20 @@ class KmsSigner:
         """Get the signer's address."""
         return self._address
 
+    def sign_tx(self, tx: dict[str, Any]) -> bytes:
+        """Sign transaction and return raw bytes (Phase 1).
+
+        Note: This is a placeholder - full KMS Ethereum signing requires
+        proper ECDSA signature reconstruction from KMS response.
+        """
+        # TODO: Implement proper KMS eth signing
+        # For now, raise to avoid silent failures
+        raise NotImplementedError(
+            "KMS eth signing not yet fully implemented. "
+            "Use sign_and_send for existing functionality or implement "
+            "proper ECDSA signature reconstruction from KMS."
+        )
+
     async def sign_and_send(self, tx: dict[str, Any]) -> str:
         """Sign and send transaction using KMS."""
         try:

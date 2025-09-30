@@ -201,9 +201,9 @@ class BulletproofAvantisTrader:
             limits = {}
 
             try:
-                limits[
-                    "max_slippage"
-                ] = self.trading_contract.functions._MAX_SLIPPAGE().call()
+                limits["max_slippage"] = (
+                    self.trading_contract.functions._MAX_SLIPPAGE().call()
+                )
                 logger.info(f"   Max Slippage: {limits['max_slippage']:,}")
             except:
                 logger.warning("   Could not get max slippage limit")

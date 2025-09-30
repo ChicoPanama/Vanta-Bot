@@ -84,8 +84,7 @@ async def test_large_position():
             trade_input = TradeInput(
                 pair_index=1,  # BTC/USD is pair 1
                 is_long=True,  # LONG position
-                open_collateral=100
-                * 10**6,  # 100 USDC in wei (maximum we can afford)
+                open_collateral=100 * 10**6,  # 100 USDC in wei (maximum we can afford)
                 leverage=100,  # 100x leverage (maximum)
                 tp=0,  # No take profit
                 sl=0,  # No stop loss

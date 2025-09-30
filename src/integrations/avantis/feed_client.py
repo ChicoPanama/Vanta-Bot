@@ -67,9 +67,7 @@ class AvantisFeedClient:
                 e.g., {"ETH/USD": callback_function}
         """
         if not self.is_configured():
-            logger.warning(
-                "⚠️ Feed client not configured - skipping price feed startup"
-            )
+            logger.warning("⚠️ Feed client not configured - skipping price feed startup")
             return
 
         if self._running:
@@ -142,7 +140,9 @@ class AvantisFeedClient:
                 logger.error(f"❌ Error in price update loop: {e}")
 
                 if self._running:
-                    logger.info(f"🔄 Reconnecting in {self._reconnect_delay} seconds...")
+                    logger.info(
+                        f"🔄 Reconnecting in {self._reconnect_delay} seconds..."
+                    )
                     await asyncio.sleep(self._reconnect_delay)
 
                     # Exponential backoff for reconnection

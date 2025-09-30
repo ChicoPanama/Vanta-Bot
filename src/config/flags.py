@@ -241,7 +241,9 @@ class FeatureFlags:
         """Get human-readable status summary"""
         mode = "🔍 DRY" if self.is_dry_mode() else "⚠️ LIVE"
         emergency = "🚨 EMERGENCY STOP" if self.is_emergency_stopped() else "✅ RUNNING"
-        maintenance = "🔧 MAINTENANCE" if self.is_maintenance_mode() else "✅ OPERATIONAL"
+        maintenance = (
+            "🔧 MAINTENANCE" if self.is_maintenance_mode() else "✅ OPERATIONAL"
+        )
 
         return f"""
 Feature Flags Status:

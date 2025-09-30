@@ -30,7 +30,9 @@ def get_trading_keyboard():
             InlineKeyboardButton("💱 Forex", callback_data="category_forex"),
         ],
         [
-            InlineKeyboardButton("🥇 Commodities", callback_data="category_commodities"),
+            InlineKeyboardButton(
+                "🥇 Commodities", callback_data="category_commodities"
+            ),
             InlineKeyboardButton("📊 Indices", callback_data="category_indices"),
         ],
         [InlineKeyboardButton("🔙 Back", callback_data="main_menu")],
@@ -303,7 +305,9 @@ def get_market_data_keyboard():
     """Market data and analysis - Avantis SDK compatible"""
     keyboard = [
         [
-            InlineKeyboardButton("📊 Real-time Prices", callback_data="realtime_prices"),
+            InlineKeyboardButton(
+                "📊 Real-time Prices", callback_data="realtime_prices"
+            ),
             InlineKeyboardButton("📈 Price History", callback_data="price_history"),
         ],
         [

@@ -307,9 +307,9 @@ class Web3TradingAdapter:
 
             # Try to get max slippage
             try:
-                limits[
-                    "max_slippage"
-                ] = self.trading_contract.functions._MAX_SLIPPAGE().call()
+                limits["max_slippage"] = (
+                    self.trading_contract.functions._MAX_SLIPPAGE().call()
+                )
             except:
                 limits["max_slippage"] = 500_000_000  # 5% default
 

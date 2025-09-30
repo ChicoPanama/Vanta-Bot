@@ -33,8 +33,17 @@ class Settings(BaseSettings):
     # Security & secrets
     ENCRYPTION_KEY: str | None = Field(None, env="ENCRYPTION_KEY")
     TRADER_PRIVATE_KEY: str | None = Field(None, env="TRADER_PRIVATE_KEY")
-    AWS_KMS_KEY_ID: str | None = Field(None, env="AWS_KMS_KEY_ID")
+
+    # Signing backends (Phase 1: KMS-first)
+    SIGNER_BACKEND: str = Field("kms", env="SIGNER_BACKEND")  # kms|local
+    PRIVATE_KEY: str | None = Field(None, env="PRIVATE_KEY")  # dev only
+    KMS_KEY_ID: str | None = Field(None, env="KMS_KEY_ID")  # AWS KMS key ID
+    AWS_KMS_KEY_ID: str | None = Field(None, env="AWS_KMS_KEY_ID")  # Legacy compat
     AWS_REGION: str = Field("us-east-1", env="AWS_REGION")
+
+    # Envelope encryption (Phase 1)
+    ENCRYPTION_CONTEXT_APP: str = Field("vanta-bot", env="ENCRYPTION_CONTEXT_APP")
+    ENCRYPTION_DEK_BYTES: int = Field(32, env="ENCRYPTION_DEK_BYTES")  # 256-bit DEK
 
     # Key vault settings
     LOCAL_WRAP_KEY_B64: str | None = Field(None, env="LOCAL_WRAP_KEY_B64")
@@ -60,8 +69,8 @@ class Settings(BaseSettings):
     LEADER_MIN_TRADES_30D: int = Field(300, env="LEADER_MIN_TRADES_30D")
     LEADER_MIN_VOLUME_30D_USD: int = Field(10_000_000, env="LEADER_MIN_VOLUME_30D_USD")
 
-    # Indexer settings
-    INDEXER_BACKFILL_RANGE: int = Field(
+    # Indexer settings (initial default)
+    INDEXER_BACKFILL_RANGE_INITIAL: int = Field(
         1000, env="INDEXER_BACKFILL_RANGE"
     )  # Number of blocks to backfill
 
@@ -146,6 +155,14 @@ class Settings(BaseSettings):
         value = (value or "DRY").upper().strip()
         if value not in {"DRY", "LIVE"}:
             raise ValueError("COPY_EXECUTION_MODE must be either 'DRY' or 'LIVE'")
+        return value
+
+    @field_validator("SIGNER_BACKEND", mode="before")
+    def _validate_signer_backend(cls, value: str) -> str:
+        """Validate signer backend is kms or local."""
+        value = (value or "kms").lower().strip()
+        if value not in {"kms", "local"}:
+            raise ValueError("SIGNER_BACKEND must be either 'kms' or 'local'")
         return value
 
     # ------------------------------------------------------------------
