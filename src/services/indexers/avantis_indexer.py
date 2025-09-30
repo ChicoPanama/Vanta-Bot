@@ -53,7 +53,7 @@ def _decode_event(w3: Web3, log: dict) -> Iterable[IndexedFill]:
 
 
 def _apply_fill(db, fill: IndexedFill) -> None:
-    """Apply fill to user position aggregate.
+    """Apply fill to user position aggregate and invalidate cache.
 
     Args:
         db: Database session
@@ -72,6 +72,14 @@ def _apply_fill(db, fill: IndexedFill) -> None:
         size_delta_1e6=size_delta,
         collateral_delta_1e6=coll_delta,
     )
+
+    # Invalidate cache immediately so users see fresh positions
+    try:
+        from src.services.cache.positions_cache import PositionsCache
+
+        PositionsCache().invalidate(fill.user_address)
+    except Exception as e:
+        logger.warning(f"Failed to invalidate cache for {fill.user_address}: {e}")
 
 
 def run_once(w3: Web3, SessionLocal) -> int:

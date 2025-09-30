@@ -5,8 +5,26 @@ from datetime import datetime
 from typing import Optional
 
 from sqlalchemy.orm import Session
+from web3 import Web3
 
 from src.database.models import IndexedFill, UserPosition
+
+
+def _normalize_address(addr: str) -> str:
+    """Normalize address to lowercase (checksummed if valid).
+
+    Args:
+        addr: Ethereum address
+
+    Returns:
+        Lowercase normalized address
+    """
+    try:
+        # Try checksum for valid addresses
+        return Web3.to_checksum_address(addr).lower()
+    except (ValueError, TypeError):
+        # For test addresses like "0xabc", just lowercase
+        return addr.lower()
 
 
 def get_position(db: Session, user_addr: str, symbol: str) -> Optional[UserPosition]:
@@ -20,9 +38,11 @@ def get_position(db: Session, user_addr: str, symbol: str) -> Optional[UserPosit
     Returns:
         UserPosition or None if not found
     """
+    # Normalize address to lowercase
+    addr = _normalize_address(user_addr)
     return (
         db.query(UserPosition)
-        .filter_by(user_address=user_addr.lower(), symbol=symbol.upper())
+        .filter_by(user_address=addr, symbol=symbol.upper())
         .one_or_none()
     )
 
@@ -50,10 +70,13 @@ def upsert_position(
     Returns:
         Updated UserPosition
     """
-    pos = get_position(db, user_addr, symbol)
+    # Normalize address to lowercase
+    addr = _normalize_address(user_addr)
+
+    pos = get_position(db, addr, symbol)
     if not pos:
         pos = UserPosition(
-            user_address=user_addr.lower(),
+            user_address=addr,
             symbol=symbol.upper(),
             is_long=is_long,
             size_usd_1e6=0,
@@ -85,9 +108,11 @@ def list_positions(db: Session, user_addr: str) -> list[UserPosition]:
     Returns:
         List of UserPosition objects
     """
+    # Normalize address to lowercase
+    addr = _normalize_address(user_addr)
     return (
         db.query(UserPosition)
-        .filter_by(user_address=user_addr.lower())
+        .filter_by(user_address=addr)
         .filter(UserPosition.size_usd_1e6 > 0)  # Only active positions
         .all()
     )
@@ -119,7 +144,9 @@ def get_fills_for_user(
     Returns:
         List of IndexedFill objects
     """
-    query = db.query(IndexedFill).filter_by(user_address=user_addr.lower())
+    # Normalize address to lowercase
+    addr = _normalize_address(user_addr)
+    query = db.query(IndexedFill).filter_by(user_address=addr)
     if symbol:
         query = query.filter_by(symbol=symbol.upper())
     return query.order_by(IndexedFill.ts.desc()).limit(limit).all()

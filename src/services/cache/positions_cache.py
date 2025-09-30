@@ -33,8 +33,16 @@ class PositionsCache:
         Returns:
             Redis key
         """
+        from web3 import Web3
+
+        # Normalize address to lowercase (handle both real and test addresses)
+        try:
+            addr = Web3.to_checksum_address(user_addr).lower()
+        except (ValueError, TypeError):
+            addr = user_addr.lower()
+        
         chain_id = getattr(settings, "CHAIN_ID", 8453)  # Base mainnet
-        return f"pos:{chain_id}:{user_addr.lower()}"
+        return f"pos:{chain_id}:{addr}"
 
     def set_positions(
         self, user_addr: str, positions: list[dict], ttl: int = 30
